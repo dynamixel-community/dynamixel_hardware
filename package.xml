@@ -12,7 +12,7 @@
   <depend>rclcpp</depend>
   <depend>hardware_interface</depend>
   <depend>pluginlib</depend>
-  <depend>dynamixel_workbench</depend>
+  <depend>dynamixel_workbench_toolbox</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
