@@ -197,10 +197,6 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
   for (uint i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joints_[i].command.position));
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(
-      info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joints_[i].command.velocity));
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(
-      info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &joints_[i].command.effort));
   }
 
   return command_interfaces;
@@ -214,8 +210,6 @@ return_type DynamixelHardware::start()
       joints_[i].state.velocity = 0.0;
       joints_[i].state.effort = 0.0;
       joints_[i].command.position = 0.0;
-      joints_[i].command.velocity = 0.0;
-      joints_[i].command.effort = 0.0;
     }
   }
 
@@ -280,7 +274,20 @@ hardware_interface::return_type DynamixelHardware::read()
 
 hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
 {
-  for (uint i = 0; i < joints_.size(); i++) {
+  std::vector<uint8_t> ids{};
+  std::vector<int32_t> positions(info_.joints.size(), 0);
+
+  std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
+  const char * log = nullptr;
+
+  for (uint i = 0; i < ids.size(); i++) {
+    positions.at(i) = dynamixel_workbench_.convertRadian2Value(
+      ids.at(i), static_cast<float>(joints_.at(ids.at(i) - 1).command.position));
+  }
+
+  if (!dynamixel_workbench_.syncWrite(
+        kGoalPositionIndex, ids.data(), ids.size(), positions.data(), 1, &log)) {
+    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   return return_type::OK;
