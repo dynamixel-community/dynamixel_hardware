@@ -42,7 +42,6 @@ struct JointValue
 
 struct Joint
 {
-  uint8_t id{0};
   JointValue state{};
   JointValue command{};
 };
@@ -78,6 +77,7 @@ private:
   DynamixelWorkbench dynamixel_workbench_;
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
+  std::vector<uint8_t> joint_ids_;
 };
 }  // namespace dynamixel_hardware
 
