@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(dynamixel-hardware)
+project(dynamixel_hardware)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -21,6 +21,24 @@ find_package(rclcpp REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(dynamixel_workbench_toolbox REQUIRED)
+
+add_library(
+  ${PROJECT_NAME}
+  SHARED
+  src/dynamixel_hardware.cpp
+)
+target_include_directories(
+  ${PROJECT_NAME}
+  PRIVATE
+  include
+)
+ament_target_dependencies(
+  ${PROJECT_NAME}
+  rclcpp
+  hardware_interface
+  pluginlib
+  dynamixel_workbench_toolbox
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
