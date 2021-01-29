@@ -33,13 +33,18 @@ using hardware_interface::return_type;
 
 namespace dynamixel_hardware
 {
-struct Joint
+struct JointValue
 {
-  std::string name;
-  double command{0.0};
   double position{0.0};
   double velocity{0.0};
   double effort{0.0};
+};
+
+struct Joint
+{
+  uint8_t id{0};
+  JointValue state{};
+  JointValue command{};
 };
 
 class DynamixelHardware
