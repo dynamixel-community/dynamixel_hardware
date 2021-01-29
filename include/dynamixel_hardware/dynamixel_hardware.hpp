@@ -28,8 +28,8 @@ class DynamixelHardware
 : public hardware_interface::BaseInterface<hardware_interface::SystemInterface>
 {
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(DynamixelHardware);
-}
+  // RCLCPP_SHARED_PTR_DEFINITIONS(DynamixelHardware);
+};
 }  // namespace dynamixel_hardware
 
 #endif  // DYNAMIXEL_HARDWARE__DYNAMIXEL_HARDWARE_HPP_
