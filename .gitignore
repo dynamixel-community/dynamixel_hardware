@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+open_manipulator
+dynamixel-workbench
+dynamixel-workbench-msgs
