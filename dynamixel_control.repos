@@ -10,4 +10,4 @@ repositories:
   open_manipulator:
     type: git
     url: https://github.com/youtalk/open_manipulator.git
-    version: colcon-ignore
+    version: ros2-control
