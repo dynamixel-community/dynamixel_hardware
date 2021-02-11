@@ -17,16 +17,12 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(joint_state_publisher REQUIRED)
-find_package(joint_state_publisher_gui REQUIRED)
 find_package(robot_state_publisher REQUIRED)
 find_package(xacro REQUIRED)
 find_package(urdf REQUIRED)
 find_package(rviz2 REQUIRED)
-find_package(launch REQUIRED)
-find_package(launch_ros REQUIRED)
 find_package(ros2_control REQUIRED)
-find_package(ros2_controller REQUIRED)
+find_package(ros2_controllers REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
