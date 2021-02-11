@@ -24,6 +24,13 @@ find_package(rviz2 REQUIRED)
 find_package(ros2_control REQUIRED)
 find_package(ros2_controllers REQUIRED)
 
+install(DIRECTORY
+  meshes
+  description
+  launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
