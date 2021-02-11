@@ -6,7 +6,7 @@
   <xacro:include filename="$(find open_manipulator_x_robot)/urdf/open_manipulator_x.urdf.xacro" />
 
   <!-- Import ros2_control -->
-  <xacro:include filename="$(find open_manipulator_x_robot)/urdf/open_manipulator_x.ros2_control.urdf.xacro" />
+  <xacro:include filename="$(find open_manipulator_x_robot)/urdf/open_manipulator_x.ros2_control.xacro" />
 
   <!-- World -->
   <link name="world"/>
