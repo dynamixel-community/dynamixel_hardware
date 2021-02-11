@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- OpenManipulator Chain -->
+<robot name="open_manipulator_x" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- Import URDF -->
+  <xacro:include filename="$(find open_manipulator_x_description)/urdf/open_manipulator_x.urdf.xacro" />
+
+  <!-- Import ros2_control -->
+  <xacro:include filename="$(find open_manipulator_x_description)/urdf/open_manipulator_x.ros2_control.urdf.xacro" />
+
+  <!-- World -->
+  <link name="world"/>
+
+  <xacro:open_manipulator_x parent="world">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:open_manipulator_x>
+</robot>
