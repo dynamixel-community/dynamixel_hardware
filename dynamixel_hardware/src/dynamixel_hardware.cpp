@@ -84,6 +84,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
 
   if (info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end()) {
     use_dummy_ = info_.hardware_parameters.at("use_dummy") == "true";
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Dummy mode");
     status_ = hardware_interface::status::CONFIGURED;
     return return_type::OK;
   }
@@ -290,6 +291,8 @@ hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
     for (auto joint : joints_) {
       joint.state.position = joint.command.position;
     }
+
+    return return_type::OK;
   }
 
   std::vector<uint8_t> ids{};
