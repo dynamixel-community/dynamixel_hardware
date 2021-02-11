@@ -24,10 +24,11 @@ import xacro
 
 
 def generate_launch_description():
-    rviz_file = os.path.join(get_package_share_directory(
-        'open_manipulator_x_robot'), 'launch', 'open_manipulator_x.rviz')
+    package_name = "open_manipulator_x_robot"
+    rviz_config = os.path.join(get_package_share_directory(
+        package_name), 'launch', package_name + '.rviz')
     robot_description = os.path.join(get_package_share_directory(
-        "open_manipulator_x_robot"), "urdf", "open_manipulator_x_robot.urdf.xacro")
+        package_name), "urdf", package_name + ".urdf.xacro")
     robot_description_config = xacro.process_file(robot_description)
 
     return LaunchDescription([
@@ -35,8 +36,6 @@ def generate_launch_description():
             package="joint_state_publisher_gui",
             executable="joint_state_publisher_gui",
             name="joint_state_publisher_gui",
-            parameters=[
-                {"robot_description": robot_description_config.toxml()}],
             output="screen"),
 
         Node(
@@ -51,6 +50,6 @@ def generate_launch_description():
             package="rviz2",
             executable="rviz2",
             name="rviz2",
-            arguments=['-d', rviz_file],
+            arguments=['-d', rviz_config],
             output="screen")
     ])
