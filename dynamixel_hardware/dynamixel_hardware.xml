@@ -1,0 +1,9 @@
+<library path="dynamixel_hardware">
+  <class name="dynamixel_hardware/DynamixelHardware"
+         type="dynamixel_hardware::DynamixelHardware"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      The ROBOTIS Dynamixel system interface.
+    </description>
+  </class>
+</library>

@@ -35,7 +35,7 @@ constexpr const char * kPresentSpeedItem = "Present_Speed";
 constexpr const char * kPresentCurrentItem = "Present_Current";
 constexpr const char * kPresentLoadItem = "Present_Load";
 
-std::vector<std::string> split(const std::string & string, const std::string & delimiter)
+std::vector<std::string> split(const std::string & string, const char & delimiter)
 {
   auto first = 0u;
   auto last = string.find_first_of(delimiter);
@@ -61,12 +61,14 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     return return_type::ERROR;
   }
 
-  auto joint_ids = split(info_.hardware_parameters.at("joint_ids"), ", ");
+  auto joint_ids = split(info_.hardware_parameters.at("joint_ids"), ',');
   joints_.resize(info_.joints.size(), Joint());
   joint_ids_.resize(info_.joints.size(), 0);
 
   if (joint_ids.size() != joints_.size()) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "Invalid joint_ids size");
+    RCLCPP_FATAL(
+      rclcpp::get_logger(kDynamixelHardware), "Invalid joint_ids size %d %d", joint_ids.size(),
+      joints_.size());
     return return_type::ERROR;
   }
 

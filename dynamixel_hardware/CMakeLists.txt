@@ -38,6 +38,18 @@ ament_target_dependencies(
   hardware_interface
   pluginlib
   dynamixel_workbench_toolbox
+  )
+
+
+pluginlib_export_plugin_description_file(hardware_interface dynamixel_hardware.xml)
+
+install(
+  TARGETS ${PROJECT_NAME}
+  DESTINATION lib
+)
+install(
+  DIRECTORY include/
+  DESTINATION include
 )
 
 if(BUILD_TESTING)
@@ -50,5 +62,18 @@ if(BUILD_TESTING)
   #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+ament_export_include_directories(
+  include
+)
+ament_export_libraries(
+  ${PROJECT_NAME}
+)
+ament_export_dependencies(
+  rclcpp
+  hardware_interface
+  pluginlib
+  dynamixel_workbench_toolbox
+)
 
 ament_package()
