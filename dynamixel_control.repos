@@ -7,7 +7,3 @@ repositories:
     type: git
     url: https://github.com/ROBOTIS-GIT/dynamixel-workbench-msgs.git
     version: ros2
-  open_manipulator:
-    type: git
-    url: https://github.com/youtalk/open_manipulator.git
-    version: ros2-control
