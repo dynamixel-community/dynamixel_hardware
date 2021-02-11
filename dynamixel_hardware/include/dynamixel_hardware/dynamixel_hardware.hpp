@@ -78,6 +78,7 @@ private:
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
+  bool use_dummy_{false};
 };
 }  // namespace dynamixel_hardware
 

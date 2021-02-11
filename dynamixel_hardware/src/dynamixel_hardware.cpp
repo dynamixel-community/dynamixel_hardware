@@ -61,7 +61,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     return return_type::ERROR;
   }
 
-  auto joint_ids = split(info_.hardware_parameters["joint_ids"], ", ");
+  auto joint_ids = split(info_.hardware_parameters.at("joint_ids"), ", ");
   joints_.resize(info_.joints.size(), Joint());
   joint_ids_.resize(info_.joints.size(), 0);
 
@@ -80,8 +80,14 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     joints_[i].command.effort = std::numeric_limits<double>::quiet_NaN();
   }
 
-  auto usb_port = info_.hardware_parameters["usb_port"];
-  auto baud_rate = std::stoi(info_.hardware_parameters["baud_rate"]);
+  if (info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end()) {
+    use_dummy_ = info_.hardware_parameters.at("use_dummy") == "true";
+    status_ = hardware_interface::status::CONFIGURED;
+    return return_type::OK;
+  }
+
+  auto usb_port = info_.hardware_parameters.at("usb_port");
+  auto baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
   const char * log = nullptr;
 
   if (!dynamixel_workbench_.init(usb_port.c_str(), baud_rate, &log)) {
@@ -225,6 +231,10 @@ return_type DynamixelHardware::stop()
 
 hardware_interface::return_type DynamixelHardware::read()
 {
+  if (use_dummy_) {
+    return return_type::OK;
+  }
+
   std::vector<uint8_t> ids{};
   std::vector<int32_t> positions(info_.joints.size(), 0);
   std::vector<int32_t> velocities(info_.joints.size(), 0);
@@ -274,6 +284,12 @@ hardware_interface::return_type DynamixelHardware::read()
 
 hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
 {
+  if (use_dummy_) {
+    for (auto joint : joints_) {
+      joint.state.position = joint.command.position;
+    }
+  }
+
   std::vector<uint8_t> ids{};
   std::vector<int32_t> positions(info_.joints.size(), 0);
 
