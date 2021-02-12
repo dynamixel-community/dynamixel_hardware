@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
 
 <!-- Import Rviz colors -->
-<xacro:include filename="$(find open_manipulator_x_robot)/urdf/materials.xacro" />
+<xacro:include filename="$(find open_manipulator_x_robot)/urdf/open_manipulator_x.material.xacro" />
 
 <xacro:macro name="open_manipulator_x" params="parent *origin">
   <joint name="origin_to_link1" type="fixed">
