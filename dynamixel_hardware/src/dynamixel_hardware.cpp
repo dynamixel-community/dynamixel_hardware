@@ -293,7 +293,7 @@ hardware_interface::return_type DynamixelHardware::read()
 hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
 {
   if (use_dummy_) {
-    for (auto joint : joints_) {
+    for (auto & joint : joints_) {
       joint.state.position = joint.command.position;
     }
 
