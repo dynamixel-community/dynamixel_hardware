@@ -24,6 +24,8 @@ import xacro
 
 def generate_launch_description():
     package_name = "open_manipulator_x_robot"
+    rviz_config = os.path.join(get_package_share_directory(
+        package_name), "launch", package_name + ".rviz")
     robot_description = os.path.join(get_package_share_directory(
         package_name), "urdf", package_name + ".urdf.xacro")
     robot_description_config = xacro.process_file(robot_description)
@@ -43,6 +45,21 @@ def generate_launch_description():
                 "stdout": "screen",
                 "stderr": "screen",
             },
-        )
+        ),
+
+        Node(
+            package="robot_state_publisher",
+            executable="robot_state_publisher",
+            name="robot_state_publisher",
+            parameters=[
+                {"robot_description": robot_description_config.toxml()}],
+            output="screen"),
+
+        Node(
+            package="rviz2",
+            executable="rviz2",
+            name="rviz2",
+            arguments=["-d", rviz_config],
+            output="screen")
 
     ])
