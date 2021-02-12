@@ -57,6 +57,7 @@ std::vector<std::string> split(const std::string & string, const char & delimite
 
 return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo & info)
 {
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "configure");
   if (configure_default(info) != return_type::OK) {
     return return_type::ERROR;
   }
@@ -84,7 +85,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
 
   if (info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end()) {
     use_dummy_ = info_.hardware_parameters.at("use_dummy") == "true";
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Dummy mode");
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "dummy mode");
     status_ = hardware_interface::status::CONFIGURED;
     return return_type::OK;
   }
@@ -187,6 +188,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
 
 std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_interfaces()
 {
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "export_state_interfaces");
   std::vector<hardware_interface::StateInterface> state_interfaces;
   for (uint i = 0; i < info_.joints.size(); i++) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
@@ -202,6 +204,7 @@ std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_
 
 std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_command_interfaces()
 {
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "export_command_interfaces");
   std::vector<hardware_interface::CommandInterface> command_interfaces;
   for (uint i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
@@ -213,6 +216,7 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
 
 return_type DynamixelHardware::start()
 {
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "start");
   for (uint i = 0; i < joints_.size(); i++) {
     if (std::isnan(joints_[i].state.position)) {
       joints_[i].state.position = 0.0;
@@ -228,6 +232,7 @@ return_type DynamixelHardware::start()
 
 return_type DynamixelHardware::stop()
 {
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "stop");
   status_ = hardware_interface::status::STOPPED;
   return return_type::OK;
 }
