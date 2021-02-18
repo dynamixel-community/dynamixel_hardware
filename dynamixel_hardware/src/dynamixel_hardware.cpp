@@ -81,6 +81,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     joints_[i].command.position = std::numeric_limits<double>::quiet_NaN();
     joints_[i].command.velocity = std::numeric_limits<double>::quiet_NaN();
     joints_[i].command.effort = std::numeric_limits<double>::quiet_NaN();
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "joint_id %d: %d", i, joint_ids_[i]);
   }
 
   if (info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end()) {
@@ -94,12 +95,16 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   auto baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
   const char * log = nullptr;
 
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "usb_port: %s", usb_port.c_str());
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "baud_rate: %d", baud_rate);
+
   if (!dynamixel_workbench_.init(usb_port.c_str(), baud_rate, &log)) {
     RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
     return return_type::ERROR;
   }
 
   for (uint i = 0; i < info_.joints.size(); ++i) {
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "ping: %d", joint_ids_[i]);
     uint16_t model_number = 0;
     if (!dynamixel_workbench_.ping(joint_ids_[i], &model_number, &log)) {
       RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
@@ -110,6 +115,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   }
 
   for (uint i = 0; i < info_.joints.size(); ++i) {
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "torque on: %d", joint_ids_[i]);
     dynamixel_workbench_.torqueOn(joint_ids_[i]);
   }
 
