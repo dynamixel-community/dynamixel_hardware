@@ -249,7 +249,7 @@ hardware_interface::return_type DynamixelHardware::read()
     return return_type::OK;
   }
 
-  std::vector<uint8_t> ids{};
+  std::vector<uint8_t> ids(info_.joints.size(), 0);
   std::vector<int32_t> positions(info_.joints.size(), 0);
   std::vector<int32_t> velocities(info_.joints.size(), 0);
   std::vector<int32_t> currents(info_.joints.size(), 0);
@@ -284,13 +284,12 @@ hardware_interface::return_type DynamixelHardware::read()
   }
 
   for (uint i = 0; i < ids.size(); i++) {
-    joints_.at(ids.at(i) - 1).state.position =
+    joints_.at(i).state.position =
       dynamixel_workbench_.convertValue2Radian(ids.at(i), positions.at(i));
-    joints_.at(ids.at(i) - 1).state.velocity =
+    joints_.at(i).state.velocity =
       dynamixel_workbench_.convertValue2Velocity(ids.at(i), velocities.at(i));
-    joints_.at(ids.at(i) - 1).state.effort =
-      dynamixel_workbench_.convertValue2Current(currents.at(i));
-    joints_.at(ids.at(i) - 1).command.position = joints_.at(ids.at(i) - 1).state.position;
+    joints_.at(i).state.effort = dynamixel_workbench_.convertValue2Current(currents.at(i));
+    joints_.at(i).command.position = joints_.at(i).state.position;
   }
 
   return return_type::OK;
@@ -306,7 +305,7 @@ hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
     return return_type::OK;
   }
 
-  std::vector<uint8_t> ids{};
+  std::vector<uint8_t> ids(info_.joints.size(), 0);
   std::vector<int32_t> positions(info_.joints.size(), 0);
 
   std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
@@ -314,7 +313,7 @@ hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
 
   for (uint i = 0; i < ids.size(); i++) {
     positions.at(i) = dynamixel_workbench_.convertRadian2Value(
-      ids.at(i), static_cast<float>(joints_.at(ids.at(i) - 1).command.position));
+      ids.at(i), static_cast<float>(joints_.at(i).command.position));
   }
 
   if (!dynamixel_workbench_.syncWrite(
