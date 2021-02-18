@@ -57,7 +57,7 @@ std::vector<std::string> split(const std::string & string, const char & delimite
 
 return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo & info)
 {
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "configure");
+  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "configure");
   if (configure_default(info) != return_type::OK) {
     return return_type::ERROR;
   }
@@ -104,7 +104,6 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   }
 
   for (uint i = 0; i < info_.joints.size(); ++i) {
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "ping: %d", joint_ids_[i]);
     uint16_t model_number = 0;
     if (!dynamixel_workbench_.ping(joint_ids_[i], &model_number, &log)) {
       RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
@@ -115,7 +114,6 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   }
 
   for (uint i = 0; i < info_.joints.size(); ++i) {
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "torque on: %d", joint_ids_[i]);
     dynamixel_workbench_.torqueOn(joint_ids_[i]);
   }
 
@@ -194,7 +192,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
 
 std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_interfaces()
 {
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "export_state_interfaces");
+  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "export_state_interfaces");
   std::vector<hardware_interface::StateInterface> state_interfaces;
   for (uint i = 0; i < info_.joints.size(); i++) {
     state_interfaces.emplace_back(hardware_interface::StateInterface(
@@ -210,7 +208,7 @@ std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_
 
 std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_command_interfaces()
 {
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "export_command_interfaces");
+  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "export_command_interfaces");
   std::vector<hardware_interface::CommandInterface> command_interfaces;
   for (uint i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
@@ -222,7 +220,7 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
 
 return_type DynamixelHardware::start()
 {
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "start");
+  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "start");
   for (uint i = 0; i < joints_.size(); i++) {
     if (std::isnan(joints_[i].state.position)) {
       joints_[i].state.position = 0.0;
@@ -238,7 +236,7 @@ return_type DynamixelHardware::start()
 
 return_type DynamixelHardware::stop()
 {
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "stop");
+  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "stop");
   status_ = hardware_interface::status::STOPPED;
   return return_type::OK;
 }
@@ -284,12 +282,10 @@ hardware_interface::return_type DynamixelHardware::read()
   }
 
   for (uint i = 0; i < ids.size(); i++) {
-    joints_.at(i).state.position =
-      dynamixel_workbench_.convertValue2Radian(ids.at(i), positions.at(i));
-    joints_.at(i).state.velocity =
-      dynamixel_workbench_.convertValue2Velocity(ids.at(i), velocities.at(i));
-    joints_.at(i).state.effort = dynamixel_workbench_.convertValue2Current(currents.at(i));
-    joints_.at(i).command.position = joints_.at(i).state.position;
+    joints_[i].state.position = dynamixel_workbench_.convertValue2Radian(ids[i], positions[i]);
+    joints_[i].state.velocity = dynamixel_workbench_.convertValue2Velocity(ids[i], velocities[i]);
+    joints_[i].state.effort = dynamixel_workbench_.convertValue2Current(currents[i]);
+    joints_[i].command.position = joints_[i].state.position;
   }
 
   return return_type::OK;
@@ -312,8 +308,8 @@ hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
   const char * log = nullptr;
 
   for (uint i = 0; i < ids.size(); i++) {
-    positions.at(i) = dynamixel_workbench_.convertRadian2Value(
-      ids.at(i), static_cast<float>(joints_.at(i).command.position));
+    positions[i] = dynamixel_workbench_.convertRadian2Value(
+      ids[i], static_cast<float>(joints_[i].command.position));
   }
 
   if (!dynamixel_workbench_.syncWrite(
