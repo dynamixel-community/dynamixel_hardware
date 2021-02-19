@@ -285,7 +285,6 @@ hardware_interface::return_type DynamixelHardware::read()
     joints_[i].state.position = dynamixel_workbench_.convertValue2Radian(ids[i], positions[i]);
     joints_[i].state.velocity = dynamixel_workbench_.convertValue2Velocity(ids[i], velocities[i]);
     joints_[i].state.effort = dynamixel_workbench_.convertValue2Current(currents[i]);
-    joints_[i].command.position = joints_[i].state.position;
   }
 
   return return_type::OK;
