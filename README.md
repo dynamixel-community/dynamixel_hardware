@@ -16,7 +16,8 @@ $ . install/setup.bash
 
 ### Configure Dynamixel motor parameters
 
-First update the `usb_port`, `baud_rate`, and `joint_ids` parameters to correctly communicate with Dynamixel motors.
+First update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+The `use_dummy` parameter is required if you don't have a real OpenManipulator-X.
 
 Note that `joint_ids` parameters must be splited by `,`.
 
