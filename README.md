@@ -1,5 +1,7 @@
 # dynamixel_control
 
+The `ros2_control` enabled [ROBOTIS Dynamixel](https://emanual.robotis.com/docs/en/dxl/) `SystemInterface` implementation and the reference implementation of the `ros2_control` robot with [ROBOTIS OpenManipulator-X](https://emanual.robotis.com/docs/en/platform/openmanipulator_x/overview/).
+
 ## Set up
 
 ```shell
