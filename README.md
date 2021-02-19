@@ -14,7 +14,25 @@ $ . install/setup.bash
 
 ## Demo with real ROBOTIS OpenManipulator-X
 
+### Configure Dynamixel motor parameters
+
+First update the `usb_port`, `baud_rate`, and `joint_ids` parameters to correctly communicate with Dynamixel motors.
+
+Note that `joint_ids` parameters must be splited by `,`.
+
+```xml
+<hardware>
+  <plugin>dynamixel_hardware/DynamixelHardware</plugin>
+  <param name="usb_port">/dev/ttyUSB0</param>
+  <param name="baud_rate">1000000</param>
+  <param name="joint_ids">11,12,13,14,15</param>
+  <!-- <param name="use_dummy">true</param> -->
+</hardware>
+```
+
 - Terminal 1
+
+Launch the `ros2_control` manager for the OpenManipulator-X.
 
 ```shell
 $ ros2 launch open_manipulator_x_robot open_manipulator_x_robot.launch.py
@@ -22,18 +40,16 @@ $ ros2 launch open_manipulator_x_robot open_manipulator_x_robot.launch.py
 
 - Terminal 2
 
+Load the `joint_state_controller` and `forward_command_controller_position`.
+Next start the `forward_command_controller_position` and send a `/forward_command_controller_position/commands` message to move the OpenManipulator-X.
+
 ```shell
 $ ros2 control load_start_controller joint_state_controller
 $ ros2 control load_configure_controller forward_command_controller_position
 $ ros2 control switch_controllers --start-controllers forward_command_controller_position
 $ ros2 control list_controllers
 $ ros2 control list_hardware_interfaces
-$ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Float64MultiArray "data:
-- 0.1
-- 0.1
-- 0.1
-- 0.1
-- 0.01"
+$ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.1, 0.1, 0.1, 0.01]"
 ```
 
 ## Demo with dummy ROBOTIS OpenManipulator-X
