@@ -37,3 +37,19 @@ $ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Floa
 ```
 
 ## Demo with dummy ROBOTIS OpenManipulator-X
+
+```diff
+diff --git a/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro b/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
+index c6cdb74..111846d 100644
+--- a/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
++++ b/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
+@@ -9,7 +9,7 @@
+         <param name="usb_port">/dev/ttyUSB0</param>
+         <param name="baud_rate">1000000</param>
+         <param name="joint_ids">11,12,13,14,15</param>
+-        <!-- <param name="use_dummy">true</param> -->
++        <param name="use_dummy">true</param>
+       </hardware>
+       <joint name="joint1">
+         <command_interface name="position"/>
+```
