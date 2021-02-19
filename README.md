@@ -33,7 +33,7 @@ $ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Floa
 - 0.1
 - 0.1
 - 0.1
-- 0.01
+- 0.01"
 ```
 
 ## Demo with dummy ROBOTIS OpenManipulator-X
