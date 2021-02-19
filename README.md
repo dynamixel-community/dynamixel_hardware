@@ -64,6 +64,8 @@ $ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Floa
 
 ## Demo with dummy ROBOTIS OpenManipulator-X
 
+The `use_dummy` parameter is required if you use the dummy OpenManipulator-X.
+
 ```diff
 diff --git a/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro b/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
 index c6cdb74..111846d 100644
@@ -79,3 +81,8 @@ index c6cdb74..111846d 100644
        <joint name="joint1">
          <command_interface name="position"/>
 ```
+
+Then follow the same instruction of the real robot one.
+
+Note that the dummy implementation has no interpolation so far.
+If you sent a joint message, the robot would move directly to the joints without interpolation.
