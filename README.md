@@ -62,6 +62,8 @@ $ ros2 control list_hardware_interfaces
 $ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.1, 0.1, 0.1, 0.01]"
 ```
 
+[![dynamixel_control: the ros2_control implementation for any kind of ROBOTIS Dynamixel robots](https://img.youtube.com/vi/lwCYwbnnyCw/0.jpg)](https://www.youtube.com/watch?v=lwCYwbnnyCw)
+
 ## Demo with dummy ROBOTIS OpenManipulator-X
 
 The `use_dummy` parameter is required if you use the dummy OpenManipulator-X.
