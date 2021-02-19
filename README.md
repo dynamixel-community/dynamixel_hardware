@@ -9,6 +9,8 @@ The `dynamixel_hardware` package is hopefully compatible any configuration of RO
 
 ## Set up
 
+First [install ROS 2 Foxy on Ubuntu 20.04](https://index.ros.org/doc/ros2/Installation/Foxy/Linux-Install-Debians/). Then follow the instruction below.
+
 ```shell
 $ source /opt/ros/foxy/setup.bash
 $ mkdir -p ~/ros/foxy && cd ~/ros/foxy
@@ -23,7 +25,7 @@ $ . install/setup.bash
 
 ### Configure Dynamixel motor parameters
 
-First update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
 The `use_dummy` parameter is required if you don't have a real OpenManipulator-X.
 
 Note that `joint_ids` parameters must be splited by `,`.
