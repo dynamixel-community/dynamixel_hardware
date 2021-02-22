@@ -50,12 +50,9 @@ $ ros2 launch open_manipulator_x_robot open_manipulator_x_robot.launch.py
 
 - Terminal 2
 
-Load the `joint_state_controller` and `forward_command_controller_position`.
-Next start the `forward_command_controller_position` and send a `/forward_command_controller_position/commands` message to move the OpenManipulator-X.
+Start the `forward_command_controller_position` and send a `/forward_command_controller_position/commands` message to move the OpenManipulator-X.
 
 ```shell
-$ ros2 control load_start_controller joint_state_controller
-$ ros2 control load_configure_controller forward_command_controller_position
 $ ros2 control switch_controllers --start-controllers forward_command_controller_position
 $ ros2 control list_controllers
 $ ros2 control list_hardware_interfaces
