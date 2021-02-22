@@ -221,6 +221,13 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
 return_type DynamixelHardware::start()
 {
   RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "start");
+  for (uint i = 0; i < joints_.size(); i++) {
+    if (std::isnan(joints_[i].state.position)) {
+      joints_[i].state.position = 0.0;
+      joints_[i].state.velocity = 0.0;
+      joints_[i].state.effort = 0.0;
+    }
+  }
   read();
 
   status_ = hardware_interface::status::STARTED;
