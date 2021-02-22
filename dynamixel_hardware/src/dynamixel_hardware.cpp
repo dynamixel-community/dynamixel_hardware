@@ -222,13 +222,19 @@ return_type DynamixelHardware::start()
 {
   RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "start");
   for (uint i = 0; i < joints_.size(); i++) {
-    if (std::isnan(joints_[i].state.position)) {
+    if (use_dummy_ && std::isnan(joints_[i].state.position)) {
       joints_[i].state.position = 0.0;
       joints_[i].state.velocity = 0.0;
       joints_[i].state.effort = 0.0;
     }
   }
   read();
+  for (uint i = 0; i < joints_.size(); i++) {
+    joints_[i].command.position = joints_[i].state.position;
+    joints_[i].command.velocity = joints_[i].state.velocity;
+    joints_[i].command.effort = joints_[i].state.effort;
+  }
+  write();
 
   status_ = hardware_interface::status::STARTED;
   return return_type::OK;
