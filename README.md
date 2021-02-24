@@ -50,13 +50,22 @@ $ ros2 launch open_manipulator_x_robot open_manipulator_x_robot.launch.py
 
 - Terminal 2
 
-Start the `forward_command_controller_position` and send a `/forward_command_controller_position/commands` message to move the OpenManipulator-X.
+Start the `joint_trajectory_controller` and send a `/joint_trajectory_controller/follow_joint_trajectory` goal to move the OpenManipulator-X.
 
 ```shell
-$ ros2 control switch_controllers --start-controllers forward_command_controller_position
+$ ros2 control switch_controllers --start-controllers joint_trajectory_controller
 $ ros2 control list_controllers
 $ ros2 control list_hardware_interfaces
-$ ros2 topic pub /forward_command_controller_position/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.1, 0.1, 0.1, 0.01]"
+$ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory control_msgs/action/FollowJointTrajectory -f "{
+  trajectory: {
+    joint_names: [joint1, joint2, joint3, joint4, gripper],
+    points: [
+      { positions: [0.1, 0.1, 0.1, 0.1, 0.01], time_from_start: { sec: 2 } },
+      { positions: [-0.1, -0.1, -0.1, -0.1, -0.01], time_from_start: { sec: 4 } },
+      { positions: [0, 0, 0, 0, 0], time_from_start: { sec: 6 } }
+    ]
+  }
+}"
 ```
 
 [![dynamixel_control: the ros2_control implementation for any kind of ROBOTIS Dynamixel robots](https://img.youtube.com/vi/lwCYwbnnyCw/0.jpg)](https://www.youtube.com/watch?v=lwCYwbnnyCw)
