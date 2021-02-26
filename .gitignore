@@ -32,6 +32,5 @@
 *.app
 
 ros2_controllers
-open_manipulator
 dynamixel-workbench
 dynamixel-workbench-msgs
