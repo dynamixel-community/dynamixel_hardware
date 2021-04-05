@@ -84,8 +84,10 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "joint_id %d: %d", i, joint_ids_[i]);
   }
 
-  if (info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end()) {
-    use_dummy_ = info_.hardware_parameters.at("use_dummy") == "true";
+  if (
+    info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end() &&
+    info_.hardware_parameters.at("use_dummy") == "true") {
+    use_dummy_ = true;
     RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "dummy mode");
     status_ = hardware_interface::status::CONFIGURED;
     return return_type::OK;
