@@ -19,8 +19,8 @@
  * library cannot have, but the consuming code must have inorder to link.
  */
 
-#ifndef DYNAMIXEL_HARDWARE__VISIBILITY_CONTROL_H_
-#define DYNAMIXEL_HARDWARE__VISIBILITY_CONTROL_H_
+#ifndef DYNAMIXEL_HARDWARE__VISIBLITY_CONTROL_H_
+#define DYNAMIXEL_HARDWARE__VISIBLITY_CONTROL_H_
 
 // This logic was borrowed (then namespaced) from the examples on the gcc wiki:
 //     https://gcc.gnu.org/wiki/Visibility
@@ -53,4 +53,4 @@
 #define DYNAMIXEL_HARDWARE_PUBLIC_TYPE
 #endif
 
-#endif  // DYNAMIXEL_HARDWARE__VISIBILITY_CONTROL_H_
+#endif  // DYNAMIXEL_HARDWARE__VISIBLITY_CONTROL_H_

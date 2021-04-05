@@ -14,9 +14,11 @@
 
 #include "dynamixel_hardware/dynamixel_hardware.hpp"
 
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
