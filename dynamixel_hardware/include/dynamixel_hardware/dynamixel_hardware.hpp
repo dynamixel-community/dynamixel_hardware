@@ -46,6 +46,17 @@ struct Joint
   JointValue command{};
 };
 
+enum class ControlMode {
+  Position,
+  Velocity,
+  Torque,
+  Currrent,
+  ExtendedPosition,
+  MultiTurn,
+  CurrentBasedPosition,
+  PWM,
+};
+
 class DynamixelHardware
 : public hardware_interface::BaseInterface<hardware_interface::SystemInterface>
 {
@@ -78,6 +89,7 @@ private:
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
+  ControlMode control_mode_;
   bool use_dummy_{false};
 };
 }  // namespace dynamixel_hardware
