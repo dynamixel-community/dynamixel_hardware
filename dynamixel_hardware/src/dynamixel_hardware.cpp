@@ -115,11 +115,17 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
       return return_type::ERROR;
     }
 
-    dynamixel_workbench_.torqueOff(joint_ids_[i]);
+    if (!dynamixel_workbench_.torqueOff(joint_ids_[i], &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      return return_type::ERROR;
+    }
   }
 
   for (uint i = 0; i < info_.joints.size(); ++i) {
-    dynamixel_workbench_.torqueOn(joint_ids_[i]);
+    if (!dynamixel_workbench_.torqueOn(joint_ids_[i], &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      return return_type::ERROR;
+    }
   }
 
   const ControlItem * goal_position =
