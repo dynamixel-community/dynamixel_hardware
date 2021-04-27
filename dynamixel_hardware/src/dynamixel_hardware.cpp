@@ -380,4 +380,5 @@ hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
 }  // namespace dynamixel_hardware
 
 #include "pluginlib/class_list_macros.hpp"
+
 PLUGINLIB_EXPORT_CLASS(dynamixel_hardware::DynamixelHardware, hardware_interface::SystemInterface)
