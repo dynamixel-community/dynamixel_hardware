@@ -31,6 +31,8 @@
 *.out
 *.app
 
+.cache
+
 ros2_controllers
 dynamixel-workbench
 dynamixel-workbench-msgs

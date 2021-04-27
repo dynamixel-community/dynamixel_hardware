@@ -27,6 +27,7 @@ namespace dynamixel_hardware
 {
 constexpr const char * kDynamixelHardware = "DynamixelHardware";
 constexpr uint8_t kGoalPositionIndex = 0;
+constexpr uint8_t kGoalVelocityIndex = 1;
 constexpr uint8_t kPresentPositionVelocityCurrentIndex = 0;
 constexpr const char * kGoalPositionItem = "Goal_Position";
 constexpr const char * kGoalVelocityItem = "Goal_Velocity";
@@ -114,11 +115,17 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
       return return_type::ERROR;
     }
 
-    dynamixel_workbench_.torqueOff(joint_ids_[i]);
+    if (!dynamixel_workbench_.torqueOff(joint_ids_[i], &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      return return_type::ERROR;
+    }
   }
 
   for (uint i = 0; i < info_.joints.size(); ++i) {
-    dynamixel_workbench_.torqueOn(joint_ids_[i]);
+    if (!dynamixel_workbench_.torqueOn(joint_ids_[i], &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      return return_type::ERROR;
+    }
   }
 
   const ControlItem * goal_position =
@@ -189,6 +196,14 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
     return return_type::ERROR;
   }
+
+  for (uint i = 0; i < info_.joints.size(); ++i) {
+    if (!dynamixel_workbench_.setPositionControlMode(joint_ids_[i], &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      return return_type::ERROR;
+    }
+  }
+  control_mode_ = ControlMode::Position;
 
   status_ = hardware_interface::status::CONFIGURED;
   return return_type::OK;
@@ -311,19 +326,53 @@ hardware_interface::return_type dynamixel_hardware::DynamixelHardware::write()
   }
 
   std::vector<uint8_t> ids(info_.joints.size(), 0);
-  std::vector<int32_t> positions(info_.joints.size(), 0);
+  std::vector<int32_t> commands(info_.joints.size(), 0);
 
   std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
   const char * log = nullptr;
 
-  for (uint i = 0; i < ids.size(); i++) {
-    positions[i] = dynamixel_workbench_.convertRadian2Value(
-      ids[i], static_cast<float>(joints_[i].command.position));
-  }
-
-  if (!dynamixel_workbench_.syncWrite(
-        kGoalPositionIndex, ids.data(), ids.size(), positions.data(), 1, &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+  if (std::any_of(
+        joints_.cbegin(), joints_.cend(), [](auto j) { return j.command.velocity != 0.0; })) {
+    if (control_mode_ != ControlMode::Velocity) {
+      for (uint i = 0; i < ids.size(); ++i) {
+        if (!dynamixel_workbench_.setVelocityControlMode(ids[i], &log)) {
+          RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+          return return_type::ERROR;
+        }
+      }
+      control_mode_ = ControlMode::Velocity;
+    }
+    for (uint i = 0; i < ids.size(); i++) {
+      commands[i] = dynamixel_workbench_.convertVelocity2Value(
+        ids[i], static_cast<float>(joints_[i].command.velocity));
+    }
+    if (!dynamixel_workbench_.syncWrite(
+          kGoalVelocityIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    }
+  } else if (std::any_of(joints_.cbegin(), joints_.cend(), [](auto j) {
+               return j.command.position != 0.0;
+             })) {
+    if (control_mode_ != ControlMode::Position) {
+      for (uint i = 0; i < ids.size(); ++i) {
+        if (!dynamixel_workbench_.setPositionControlMode(ids[i], &log)) {
+          RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+          return return_type::ERROR;
+        }
+      }
+      control_mode_ = ControlMode::Position;
+    }
+    for (uint i = 0; i < ids.size(); i++) {
+      commands[i] = dynamixel_workbench_.convertRadian2Value(
+        ids[i], static_cast<float>(joints_[i].command.position));
+    }
+    if (!dynamixel_workbench_.syncWrite(
+          kGoalPositionIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
+      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    }
+  } else {
+    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "Effort control is not implemented");
+    return return_type::ERROR;
   }
 
   return return_type::OK;
