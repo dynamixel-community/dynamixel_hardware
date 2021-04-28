@@ -87,7 +87,8 @@ public:
 private:
   hardware_interface::return_type enable_torque(const bool enabled);
 
-  hardware_interface::return_type set_control_mode(const ControlMode & mode);
+  hardware_interface::return_type set_control_mode(
+    const ControlMode & mode, const bool force_set = false);
 
   DynamixelWorkbench dynamixel_workbench_;
   std::map<const char * const, const ControlItem *> control_items_;

@@ -118,7 +118,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   }
 
   enable_torque(false);
-  set_control_mode(ControlMode::Position);
+  set_control_mode(ControlMode::Position, true);
   enable_torque(true);
 
   const ControlItem * goal_position =
@@ -322,11 +322,6 @@ hardware_interface::return_type DynamixelHardware::write()
         joints_.cbegin(), joints_.cend(), [](auto j) { return j.command.velocity != 0.0; })) {
     // Velocity control
     set_control_mode(ControlMode::Velocity);
-    for (const auto & j : joints_) {
-      RCLCPP_INFO(
-        rclcpp::get_logger(kDynamixelHardware), "%.3f %.3f %.3f", j.command.position,
-        j.command.velocity, j.command.effort);
-    }
     for (uint i = 0; i < ids.size(); i++) {
       commands[i] = dynamixel_workbench_.convertVelocity2Value(
         ids[i], static_cast<float>(joints_[i].command.velocity));
@@ -383,11 +378,12 @@ hardware_interface::return_type DynamixelHardware::enable_torque(const bool enab
   return return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardware::set_control_mode(const ControlMode & mode)
+hardware_interface::return_type DynamixelHardware::set_control_mode(
+  const ControlMode & mode, const bool force_set)
 {
   const char * log = nullptr;
 
-  if (mode == ControlMode::Velocity && control_mode_ != ControlMode::Velocity) {
+  if (mode == ControlMode::Velocity && (force_set || control_mode_ != ControlMode::Velocity)) {
     bool torque_enabled = torque_enabled_;
     if (torque_enabled) {
       enable_torque(false);
@@ -405,7 +401,8 @@ hardware_interface::return_type DynamixelHardware::set_control_mode(const Contro
     if (torque_enabled) {
       enable_torque(true);
     }
-  } else if (mode == ControlMode::Position && control_mode_ != ControlMode::Position) {
+  } else if (
+    mode == ControlMode::Position && (force_set || control_mode_ != ControlMode::Position)) {
     bool torque_enabled = torque_enabled_;
     if (torque_enabled) {
       enable_torque(false);
