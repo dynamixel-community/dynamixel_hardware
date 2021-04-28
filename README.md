@@ -54,8 +54,6 @@ Start the `joint_trajectory_controller` and send a `/joint_trajectory_controller
 
 ```shell
 $ ros2 control switch_controllers --start-controllers joint_trajectory_controller
-$ ros2 control list_controllers
-$ ros2 control list_hardware_interfaces
 $ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory control_msgs/action/FollowJointTrajectory -f "{
   trajectory: {
     joint_names: [joint1, joint2, joint3, joint4, gripper],
@@ -68,7 +66,7 @@ $ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory con
 }"
 ```
 
-[![dynamixel_control: the ros2_control implementation for any kind of ROBOTIS Dynamixel robots](https://img.youtube.com/vi/lwCYwbnnyCw/0.jpg)](https://www.youtube.com/watch?v=lwCYwbnnyCw)
+[![dynamixel_control: the ros2_control implementation for any kind of ROBOTIS Dynamixel robots](https://img.youtube.com/vi/EZtBaU-otzI/0.jpg)](https://www.youtube.com/watch?v=EZtBaU-otzI)
 
 ## Demo with dummy ROBOTIS OpenManipulator-X
 
