@@ -249,7 +249,7 @@ return_type DynamixelHardware::stop()
   return return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardware::read()
+return_type DynamixelHardware::read()
 {
   if (use_dummy_) {
     return return_type::OK;
@@ -298,7 +298,7 @@ hardware_interface::return_type DynamixelHardware::read()
   return return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardware::write()
+return_type DynamixelHardware::write()
 {
   if (use_dummy_) {
     for (auto & joint : joints_) {
@@ -348,7 +348,7 @@ hardware_interface::return_type DynamixelHardware::write()
   return return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardware::enable_torque(const bool enabled)
+return_type DynamixelHardware::enable_torque(const bool enabled)
 {
   const char * log = nullptr;
 
@@ -375,8 +375,7 @@ hardware_interface::return_type DynamixelHardware::enable_torque(const bool enab
   return return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardware::set_control_mode(
-  const ControlMode & mode, const bool force_set)
+return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const bool force_set)
 {
   const char * log = nullptr;
 
@@ -426,7 +425,7 @@ hardware_interface::return_type DynamixelHardware::set_control_mode(
   return return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardware::reset_command()
+return_type DynamixelHardware::reset_command()
 {
   for (uint i = 0; i < joints_.size(); i++) {
     joints_[i].command.position = joints_[i].state.position;
