@@ -227,6 +227,8 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
   for (uint i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joints_[i].command.position));
+    command_interfaces.emplace_back(hardware_interface::CommandInterface(
+      info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joints_[i].command.velocity));
   }
 
   return command_interfaces;
