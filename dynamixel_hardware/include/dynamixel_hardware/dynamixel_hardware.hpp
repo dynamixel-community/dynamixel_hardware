@@ -85,6 +85,8 @@ public:
   return_type write() override;
 
 private:
+  hardware_interface::return_type set_control_mode(const ControlMode & mode);
+
   DynamixelWorkbench dynamixel_workbench_;
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
