@@ -198,7 +198,7 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     return return_type::ERROR;
   }
 
-  set_control_mode(ControlMode::Position);
+  // set_control_mode(ControlMode::Position);
 
   status_ = hardware_interface::status::CONFIGURED;
   return return_type::OK;
@@ -330,7 +330,8 @@ hardware_interface::return_type DynamixelHardware::write()
 
   if (std::any_of(
         joints_.cbegin(), joints_.cend(), [](auto j) { return j.command.velocity != 0.0; })) {
-    set_control_mode(ControlMode::Velocity);
+    // Velocity control
+    // set_control_mode(ControlMode::Velocity);
     for (uint i = 0; i < ids.size(); i++) {
       commands[i] = dynamixel_workbench_.convertVelocity2Value(
         ids[i], static_cast<float>(joints_[i].command.velocity));
@@ -339,21 +340,23 @@ hardware_interface::return_type DynamixelHardware::write()
           kGoalVelocityIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
       RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
     }
-  } else if (std::any_of(joints_.cbegin(), joints_.cend(), [](auto j) {
-               return j.command.position != 0.0;
-             })) {
-    set_control_mode(ControlMode::Position);
-    for (uint i = 0; i < ids.size(); i++) {
-      commands[i] = dynamixel_workbench_.convertRadian2Value(
-        ids[i], static_cast<float>(joints_[i].command.position));
-    }
-    if (!dynamixel_workbench_.syncWrite(
-          kGoalPositionIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
-      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    }
-  } else {
+    return return_type::OK;
+  } else if (std::any_of(
+               joints_.cbegin(), joints_.cend(), [](auto j) { return j.command.effort != 0.0; })) {
+    // Effort control
     RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "Effort control is not implemented");
     return return_type::ERROR;
+  }
+
+  // Position control
+  // set_control_mode(ControlMode::Position);
+  for (uint i = 0; i < ids.size(); i++) {
+    commands[i] = dynamixel_workbench_.convertRadian2Value(
+      ids[i], static_cast<float>(joints_[i].command.position));
+  }
+  if (!dynamixel_workbench_.syncWrite(
+        kGoalPositionIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
+    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   return return_type::OK;
