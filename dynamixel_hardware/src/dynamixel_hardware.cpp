@@ -235,11 +235,7 @@ return_type DynamixelHardware::start()
     }
   }
   read();
-  for (uint i = 0; i < joints_.size(); i++) {
-    joints_[i].command.position = joints_[i].state.position;
-    joints_[i].command.velocity = 0.0;
-    joints_[i].command.effort = 0.0;
-  }
+  reset_command();
   write();
 
   status_ = hardware_interface::status::STARTED;
@@ -363,6 +359,7 @@ hardware_interface::return_type DynamixelHardware::enable_torque(const bool enab
         return return_type::ERROR;
       }
     }
+    reset_command();
     RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Torque enabled");
   } else if (!enabled && torque_enabled_) {
     for (uint i = 0; i < info_.joints.size(); ++i) {
@@ -424,6 +421,17 @@ hardware_interface::return_type DynamixelHardware::set_control_mode(
     RCLCPP_FATAL(
       rclcpp::get_logger(kDynamixelHardware), "Only position/velocity control are implemented");
     return return_type::ERROR;
+  }
+
+  return return_type::OK;
+}
+
+hardware_interface::return_type DynamixelHardware::reset_command()
+{
+  for (uint i = 0; i < joints_.size(); i++) {
+    joints_[i].command.position = joints_[i].state.position;
+    joints_[i].command.velocity = 0.0;
+    joints_[i].command.effort = 0.0;
   }
 
   return return_type::OK;
