@@ -58,12 +58,19 @@ $ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory con
   trajectory: {
     joint_names: [joint1, joint2, joint3, joint4, gripper],
     points: [
-      { positions: [0.1, 0.1, 0.1, 0.1, 0.01], time_from_start: { sec: 2 } },
-      { positions: [-0.1, -0.1, -0.1, -0.1, -0.01], time_from_start: { sec: 4 } },
+      { positions: [0.1, 0.1, 0.1, 0.1, 0], time_from_start: { sec: 2 } },
+      { positions: [-0.1, -0.1, -0.1, -0.1, 0], time_from_start: { sec: 4 } },
       { positions: [0, 0, 0, 0, 0], time_from_start: { sec: 6 } }
     ]
   }
 }"
+```
+
+If you would like to use the velocity control instead, switch to the `velocity_controller` and publish a `/velocity_controller/commands` message to move the OpenManipulator-X.
+
+```shell
+$ ros2 control switch_controllers --start-controllers velocity_controller
+$ ros2 topic pub /velocity_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.1, 0.1, 0.1, 0]"
 ```
 
 [![dynamixel_control: the ros2_control implementation for any kind of ROBOTIS Dynamixel robots](https://img.youtube.com/vi/EZtBaU-otzI/0.jpg)](https://www.youtube.com/watch?v=EZtBaU-otzI)
