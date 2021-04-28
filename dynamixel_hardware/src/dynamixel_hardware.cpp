@@ -247,8 +247,8 @@ return_type DynamixelHardware::start()
   read();
   for (uint i = 0; i < joints_.size(); i++) {
     joints_[i].command.position = joints_[i].state.position;
-    joints_[i].command.velocity = joints_[i].state.velocity;
-    joints_[i].command.effort = joints_[i].state.effort;
+    joints_[i].command.velocity = 0.0;
+    joints_[i].command.effort = 0.0;
   }
   write();
 
