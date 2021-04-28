@@ -85,13 +85,16 @@ public:
   return_type write() override;
 
 private:
+  hardware_interface::return_type enable_torque(const bool enabled);
+
   hardware_interface::return_type set_control_mode(const ControlMode & mode);
 
   DynamixelWorkbench dynamixel_workbench_;
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
-  ControlMode control_mode_;
+  ControlMode control_mode_{ControlMode::Position};
+  bool torque_enabled_{false};
   bool use_dummy_{false};
 };
 }  // namespace dynamixel_hardware
