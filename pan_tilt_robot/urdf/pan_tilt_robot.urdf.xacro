@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<robot name="pan_tilt" xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:include filename="$(find pan_tilt_robot)/urdf/pan_tilt.xacro" />
+  <xacro:include filename="$(find pan_tilt_robot)/urdf/pan_tilt.ros2_control.xacro" />
+
+  <link name="world"/>
+
+  <xacro:pan_tilt parent="world">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:pan_tilt>
+
+  <xacro:pan_tilt_ros2_control name="pan_tilt_ros2_control" />
+</robot>
