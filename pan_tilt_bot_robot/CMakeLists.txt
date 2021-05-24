@@ -27,6 +27,7 @@ find_package(dynamixel_hardware REQUIRED)
 find_package(open_manipulator_x_robot REQUIRED)
 
 install(DIRECTORY
+  meshes
   urdf
   controllers
   launch
