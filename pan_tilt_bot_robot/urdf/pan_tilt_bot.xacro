@@ -2,9 +2,9 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
 
 <!-- Import Rviz colors -->
-<xacro:include filename="$(find pan_tilt_robot)/urdf/pan_tilt.material.xacro" />
+<xacro:include filename="$(find pan_tilt_bot_robot)/urdf/pan_tilt_bot.material.xacro" />
 
-<xacro:macro name="pan_tilt" params="parent *origin">
+<xacro:macro name="pan_tilt_bot" params="parent *origin">
   <joint name="origin_to_link1" type="fixed">
     <xacro:insert_block name="origin" />
     <parent link="${parent}" />
