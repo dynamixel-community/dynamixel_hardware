@@ -16,15 +16,9 @@ velocity_controller:
     joints:
       - joint1
       - joint2
-      - joint3
-      - joint4
-      - gripper
 
 joint_trajectory_controller:
   ros__parameters:
     joints:
       - joint1
       - joint2
-      - joint3
-      - joint4
-      - gripper
