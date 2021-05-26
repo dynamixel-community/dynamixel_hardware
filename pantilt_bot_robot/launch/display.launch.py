@@ -22,7 +22,7 @@ import xacro
 
 
 def generate_launch_description():
-    package_name = "pan_tilt_bot_robot"
+    package_name = "pantilt_bot_robot"
     rviz_config = os.path.join(get_package_share_directory(
         package_name), "launch", package_name + ".rviz")
     robot_description = os.path.join(get_package_share_directory(

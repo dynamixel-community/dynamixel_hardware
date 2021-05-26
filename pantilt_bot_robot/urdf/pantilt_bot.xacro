@@ -2,9 +2,9 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
 
   <!-- Import Rviz colors -->
-  <xacro:include filename="$(find pan_tilt_bot_robot)/urdf/pan_tilt_bot.material.xacro" />
+  <xacro:include filename="$(find pantilt_bot_robot)/urdf/pantilt_bot.material.xacro" />
 
-  <xacro:macro name="pan_tilt_bot" params="parent *origin">
+  <xacro:macro name="pantilt_bot" params="parent *origin">
     <link name="j1_link">
       <inertial>
         <origin rpy="0 0 0" xyz="-5.549338143508866e-15 0.011937164947263951 0.019605935309866387"/>
@@ -14,14 +14,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j1.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j1.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j1.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j1.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
@@ -35,14 +35,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="0.0 -0.000319 -0.038"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="0.0 -0.000319 -0.038"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
@@ -56,14 +56,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="-0.011 0.016681 -0.0465"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j2.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j2.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="-0.011 0.016681 -0.0465"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j2.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j2.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
@@ -77,14 +77,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="-0.0 -0.019319 -0.0785"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="-0.0 -0.019319 -0.0785"/>
         <geometry>
-          <mesh filename="package://pan_tilt_bot_robot/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_robot/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
