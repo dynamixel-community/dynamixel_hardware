@@ -24,7 +24,7 @@ find_package(rviz2 REQUIRED)
 find_package(ros2_control REQUIRED)
 find_package(ros2_controllers REQUIRED)
 find_package(dynamixel_hardware REQUIRED)
-find_package(open_manipulator_x_robot REQUIRED)
+find_package(realsense2_description REQUIRED)
 
 install(DIRECTORY
   meshes
