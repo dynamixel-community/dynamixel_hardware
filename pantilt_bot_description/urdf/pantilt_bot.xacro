@@ -2,7 +2,7 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
 
   <!-- Import Rviz colors -->
-  <xacro:include filename="$(find pantilt_bot_robot)/urdf/pantilt_bot.material.xacro" />
+  <xacro:include filename="$(find pantilt_bot_description)/urdf/pantilt_bot.material.xacro" />
 
   <xacro:macro name="pantilt_bot" params="parent *origin">
     <link name="j1_link">
@@ -14,14 +14,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j1.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j1.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j1.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j1.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
@@ -35,14 +35,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="0.0 -0.000319 -0.038"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="0.0 -0.000319 -0.038"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j1_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
@@ -56,14 +56,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="-0.011 0.016681 -0.0465"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j2.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j2.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="-0.011 0.016681 -0.0465"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j2.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j2.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
@@ -77,14 +77,14 @@
       <visual>
         <origin rpy="0 0 0" xyz="-0.0 -0.019319 -0.0785"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="grey"/>
       </visual>
       <collision>
         <origin rpy="0 0 0" xyz="-0.0 -0.019319 -0.0785"/>
         <geometry>
-          <mesh filename="package://pantilt_bot_robot/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://pantilt_bot_description/meshes/j2_horn.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>

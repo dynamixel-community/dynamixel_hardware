@@ -3,7 +3,7 @@
 The [`ros2_control`](https://github.com/ros-controls/ros2_control) implementation for any kind of [ROBOTIS Dynamixel](https://emanual.robotis.com/docs/en/dxl/) robots.
 
 - `dynamixel_hardware`: the [`SystemInterface`](https://github.com/ros-controls/ros2_control/blob/master/hardware_interface/include/hardware_interface/system_interface.hpp) implementation for the multiple ROBOTIS Dynamixel servos.
-- `open_manipulator_x_robot`: the reference implementation of the `ros2_control` robot using [ROBOTIS OpenManipulator-X](https://emanual.robotis.com/docs/en/platform/openmanipulator_x/overview/).
+- `open_manipulator_x_description`: the reference implementation of the `ros2_control` robot using [ROBOTIS OpenManipulator-X](https://emanual.robotis.com/docs/en/platform/openmanipulator_x/overview/).
 
 The `dynamixel_hardware` package is hopefully compatible any configuration of ROBOTIS Dynamixel servos thanks to the `ros2_control`'s flexible architecture.
 
@@ -25,7 +25,7 @@ $ . install/setup.bash
 
 ### Configure Dynamixel motor parameters
 
-Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
 The `use_dummy` parameter is required if you don't have a real OpenManipulator-X.
 
 Note that `joint_ids` parameters must be splited by `,`.
@@ -45,7 +45,7 @@ Note that `joint_ids` parameters must be splited by `,`.
 Launch the `ros2_control` manager for the OpenManipulator-X.
 
 ```shell
-$ ros2 launch open_manipulator_x_robot open_manipulator_x_robot.launch.py
+$ ros2 launch open_manipulator_x_description open_manipulator_x.launch.py
 ```
 
 - Terminal 2
@@ -80,10 +80,10 @@ $ ros2 topic pub /velocity_controller/commands std_msgs/msg/Float64MultiArray "d
 The `use_dummy` parameter is required if you use the dummy OpenManipulator-X.
 
 ```diff
-diff --git a/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro b/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
+diff --git a/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro b/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro
 index c6cdb74..111846d 100644
---- a/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
-+++ b/open_manipulator_x_robot/urdf/open_manipulator_x.ros2_control.xacro
+--- a/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro
++++ b/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro
 @@ -9,7 +9,7 @@
          <param name="usb_port">/dev/ttyUSB0</param>
          <param name="baud_rate">1000000</param>
