@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(open_manipulator_x_robot)
+project(pantilt_bot_robot)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -24,6 +24,7 @@ find_package(rviz2 REQUIRED)
 find_package(ros2_control REQUIRED)
 find_package(ros2_controllers REQUIRED)
 find_package(dynamixel_hardware REQUIRED)
+find_package(realsense2_description REQUIRED)
 
 install(DIRECTORY
   meshes
