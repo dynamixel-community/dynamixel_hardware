@@ -22,11 +22,12 @@ import xacro
 
 
 def generate_launch_description():
-    package_name = "open_manipulator_x_description"
+    robot_name = "open_manipulator_x"
+    package_name = robot_name + "_description"
     rviz_config = os.path.join(get_package_share_directory(
-        package_name), "launch", package_name + ".rviz")
+        package_name), "launch", robot_name + ".rviz")
     robot_description = os.path.join(get_package_share_directory(
-        package_name), "urdf", package_name + ".urdf.xacro")
+        package_name), "urdf", robot_name + ".urdf.xacro")
     robot_description_config = xacro.process_file(robot_description)
 
     return LaunchDescription([
