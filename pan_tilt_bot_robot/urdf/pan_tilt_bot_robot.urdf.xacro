@@ -2,12 +2,17 @@
 <robot name="pan_tilt_bot" xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:include filename="$(find pan_tilt_bot_robot)/urdf/pan_tilt_bot.xacro" />
   <xacro:include filename="$(find pan_tilt_bot_robot)/urdf/pan_tilt_bot.ros2_control.xacro" />
+  <xacro:include filename="$(find realsense2_description)/urdf/_d435.urdf.xacro" />
 
   <link name="world"/>
 
   <xacro:pan_tilt_bot parent="world">
     <origin xyz="0 0 0" rpy="0 0 0" />
   </xacro:pan_tilt_bot>
+
+  <xacro:sensor_d435 parent="j2_horn_link" use_nominal_extrinsics="true" add_plug="false">
+    <origin xyz="0.0125 -0.019 0.065" rpy="0 -1.5708 0"/>
+  </xacro:sensor_d435>
 
   <xacro:pan_tilt_bot_ros2_control name="pan_tilt_bot_ros2_control" />
 </robot>

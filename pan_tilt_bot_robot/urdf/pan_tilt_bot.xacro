@@ -97,7 +97,7 @@
     </joint>
 
     <joint name="j1" type="revolute">
-      <origin rpy="0 0 0" xyz="0.0 0.000319 0.038"/>
+      <origin rpy="0 0 1.5708" xyz="0.0 0.000319 0.038"/>
       <parent link="j1_link"/>
       <child link="j1_horn_link"/>
       <axis xyz="-0.0 -0.0 -1.0"/>
@@ -115,7 +115,7 @@
       <parent link="j2_link"/>
       <child link="j2_horn_link"/>
       <axis xyz="-0.0 -1.0 -0.0"/>
-      <limit effort="100" lower="-1.745329" upper="1.745329" velocity="100"/>
+      <limit effort="100" lower="-2.1" upper="2.1" velocity="100"/>
     </joint>
 
   </xacro:macro>

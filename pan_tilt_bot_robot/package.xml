@@ -21,6 +21,7 @@
   <depend>ros2_controllers</depend>
   <depend>dynamixel_hardware</depend>
   <depend>open_manipulator_x_robot</depend>
+  <depend>realsense2_description</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
