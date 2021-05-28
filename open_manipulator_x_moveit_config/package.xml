@@ -13,6 +13,7 @@
   <depend>rviz2</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
+  <depend>open_manipulator_x_description</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
