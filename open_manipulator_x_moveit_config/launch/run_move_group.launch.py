@@ -44,7 +44,6 @@ def load_yaml(package_name, file_path):
 
 
 def generate_launch_description():
-    # planning_context
     xacro_file = os.path.join(get_package_share_directory('open_manipulator_x_description'),
                               'urdf', 'open_manipulator_x.urdf.xacro')
     robot_description_config = xacro.process_file(xacro_file)
@@ -58,7 +57,6 @@ def generate_launch_description():
     kinematics_yaml = load_yaml(
         'open_manipulator_x_moveit_config', 'config/kinematics.yaml')
 
-    # Planning Functionality
     ompl_planning_pipeline_config = {'move_group': {
         'planning_plugin': 'ompl_interface/OMPLPlanner',
         'request_adapters': 'default_planner_request_adapters/AddTimeOptimalParameterization \
@@ -71,7 +69,6 @@ def generate_launch_description():
         'open_manipulator_x_moveit_config', 'config/ompl_planning.yaml')
     ompl_planning_pipeline_config['move_group'].update(ompl_planning_yaml)
 
-    # Trajectory Execution Functionality
     controllers_yaml = load_yaml(
         'open_manipulator_x_description', 'controllers/controllers.yaml')
     moveit_controllers = {
@@ -88,7 +85,6 @@ def generate_launch_description():
                                          'publish_state_updates': True,
                                          'publish_transforms_updates': True}
 
-    # Start the actual move_group node/action server
     return LaunchDescription([
         Node(package='moveit_ros_move_group',
              executable='move_group',
