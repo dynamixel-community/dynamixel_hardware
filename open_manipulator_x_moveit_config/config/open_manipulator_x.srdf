@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="open_manipulator_x">
+  <group name="arm">
+    <chain base_link="link1" tip_link="gripper_link" />
+  </group>
+  <group_state name="zero" group="arm">
+    <joint name="crane_plus_joint1" value="0" />
+    <joint name="crane_plus_joint2" value="0" />
+    <joint name="crane_plus_joint3" value="0" />
+    <joint name="crane_plus_joint4" value="0" />
+  </group_state>
+  <end_effector name="end_effector" parent_link="gripper_link" group="gripper" />
+  <virtual_joint name="table" type="fixed" parent_frame="world" child_link="link1" />
+</robot>

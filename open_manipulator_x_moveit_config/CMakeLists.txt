@@ -19,8 +19,6 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(moveit_ros_move_group REQUIRED)
 find_package(rviz2 REQUIRED)
-find_package(launch REQUIRED)
-find_package(launch_ros REQUIRED)
 find_package(open_manipulator_x_description REQUIRED)
 
 install(DIRECTORY
