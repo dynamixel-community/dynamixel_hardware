@@ -47,9 +47,8 @@ def generate_launch_description():
     # planning_context
     xacro_file = os.path.join(get_package_share_directory('open_manipulator_x_description'),
                               'urdf', 'open_manipulator_x.urdf.xacro')
-    doc = xacro.process_file(xacro_file)
-    robot_description_config = doc.toprettyxml(indent='  ')
-    robot_description = {'robot_description': robot_description_config}
+    robot_description_config = xacro.process_file(xacro_file)
+    robot_description = {'robot_description': robot_description_config.toxml()}
 
     robot_description_semantic_config = load_file(
         'open_manipulator_x_moveit_config', 'config/open_manipulator_x.srdf')
@@ -74,7 +73,7 @@ def generate_launch_description():
 
     # Trajectory Execution Functionality
     controllers_yaml = load_yaml(
-        'open_manipulator_x_moveit_config', 'config/controllers.yaml')
+        'open_manipulator_x_description', 'controllers/controllers.yaml')
     moveit_controllers = {
         'moveit_simple_controller_manager': controllers_yaml,
         'moveit_controller_manager': 'moveit_simple_controller_manager/MoveItSimpleControllerManager'}
@@ -90,15 +89,15 @@ def generate_launch_description():
                                          'publish_transforms_updates': True}
 
     # Start the actual move_group node/action server
-    run_move_group_node = Node(package='moveit_ros_move_group',
-                               executable='move_group',
-                               output='screen',
-                               parameters=[robot_description,
-                                           robot_description_semantic,
-                                           kinematics_yaml,
-                                           ompl_planning_pipeline_config,
-                                           trajectory_execution,
-                                           moveit_controllers,
-                                           planning_scene_monitor_parameters])
-
-    return LaunchDescription([run_move_group_node])
+    return LaunchDescription([
+        Node(package='moveit_ros_move_group',
+             executable='move_group',
+             output='screen',
+             parameters=[robot_description,
+                         robot_description_semantic,
+                         kinematics_yaml,
+                         ompl_planning_pipeline_config,
+                         trajectory_execution,
+                         moveit_controllers,
+                         planning_scene_monitor_parameters])
+    ])
