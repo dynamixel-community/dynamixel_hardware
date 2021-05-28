@@ -28,7 +28,7 @@ def load_file(package_name, file_path):
     try:
         with open(absolute_file_path, 'r') as file:
             return file.read()
-    except EnvironmentError:  # parent of IOError, OSError *and* WindowsError where available
+    except EnvironmentError:
         return None
 
 
@@ -39,7 +39,7 @@ def load_yaml(package_name, file_path):
     try:
         with open(absolute_file_path, 'r') as file:
             return yaml.safe_load(file)
-    except EnvironmentError:  # parent of IOError, OSError *and* WindowsError where available
+    except EnvironmentError:
         return None
 
 
@@ -70,7 +70,7 @@ def generate_launch_description():
     ompl_planning_pipeline_config['move_group'].update(ompl_planning_yaml)
 
     controllers_yaml = load_yaml(
-        'open_manipulator_x_description', 'controllers/controllers.yaml')
+        'open_manipulator_x_moveit_config', 'config/controllers.yaml')
     moveit_controllers = {
         'moveit_simple_controller_manager': controllers_yaml,
         'moveit_controller_manager': 'moveit_simple_controller_manager/MoveItSimpleControllerManager'}
