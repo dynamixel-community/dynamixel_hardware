@@ -10,4 +10,12 @@
     <joint name="joint4" value="0" />
     <joint name="gripper" value="0" />
   </group_state>
+  <virtual_joint name="table" type="fixed" parent_frame="world" child_link="link1" />
+  <disable_collisions link1="link1" link2="link2" reason="Adjacent" />
+  <disable_collisions link1="link2" link2="link3" reason="Adjacent" />
+  <disable_collisions link1="link3" link2="link4" reason="Adjacent" />
+  <disable_collisions link1="link4" link2="link5" reason="Adjacent" />
+  <disable_collisions link1="link4" link2="link5" reason="Adjacent" />
+  <disable_collisions link1="link5" link2="gripper_link" reason="Adjacent" />
+  <disable_collisions link1="link5" link2="gripper_link_sub" reason="Adjacent" />
 </robot>
