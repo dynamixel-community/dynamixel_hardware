@@ -83,10 +83,6 @@ def generate_launch_description():
             executable="rviz2",
             name="rviz2",
             arguments=["-d", rviz_config],
-            output={
-                "stdout": "screen",
-                "stderr": "log",
-            },
-        )
+            output="screen"),
 
     ])
