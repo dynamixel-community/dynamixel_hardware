@@ -100,7 +100,7 @@
       <origin rpy="0 0 1.5708" xyz="0.0 0.000319 0.038"/>
       <parent link="joint1_link"/>
       <child link="joint1_horn_link"/>
-      <axis xyz="-0.0 -0.0 -1.0"/>
+      <axis xyz="-0.0 -0.0 1.0"/>
       <limit effort="100" lower="-2.96706" upper="2.96706" velocity="100"/>
     </joint>
 
