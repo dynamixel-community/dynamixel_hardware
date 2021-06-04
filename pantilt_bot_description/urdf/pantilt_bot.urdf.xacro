@@ -11,7 +11,7 @@
   </xacro:pantilt_bot>
 
   <xacro:sensor_d435 parent="joint2_horn_link" use_nominal_extrinsics="true" add_plug="false">
-    <origin xyz="0.0125 -0.019 0.065" rpy="0 -1.5708 0"/>
+    <origin xyz="-0.0125 -0.019 0.065" rpy="0 -1.5708 3.1416"/>
   </xacro:sensor_d435>
 
   <xacro:pantilt_bot_ros2_control name="pantilt_bot_ros2_control" />
