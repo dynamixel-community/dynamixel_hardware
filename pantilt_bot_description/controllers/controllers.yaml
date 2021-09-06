@@ -22,3 +22,9 @@ joint_trajectory_controller:
     joints:
       - joint1
       - joint2
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
