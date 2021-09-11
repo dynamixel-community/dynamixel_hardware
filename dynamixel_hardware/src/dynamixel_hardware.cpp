@@ -275,6 +275,8 @@ return_type DynamixelHardware::write()
   if (use_dummy_) {
     for (auto & joint : joints_) {
       joint.state.position = joint.command.position;
+      joint.state.velocity = joint.command.velocity;
+      joint.state.effort = joint.command.effort;
     }
 
     return return_type::OK;
