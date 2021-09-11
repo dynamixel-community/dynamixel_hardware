@@ -93,7 +93,6 @@
       <xacro:insert_block name="origin" />
       <parent link="${parent}" />
       <child link="joint1_link" />
-      <axis xyz="0 0 1" />
     </joint>
 
     <joint name="joint1" type="revolute">
@@ -101,7 +100,7 @@
       <parent link="joint1_link"/>
       <child link="joint1_horn_link"/>
       <axis xyz="-0.0 -0.0 1.0"/>
-      <limit effort="100" lower="-2.96706" upper="2.96706" velocity="100"/>
+      <limit effort="1" lower="-2.96706" upper="2.96706" velocity="${46 / 60.0 * 2.0 * pi}"/>
     </joint>
 
     <joint name="joint1_horn_to_joint2" type="fixed">
@@ -115,7 +114,7 @@
       <parent link="joint2_link"/>
       <child link="joint2_horn_link"/>
       <axis xyz="-0.0 -1.0 -0.0"/>
-      <limit effort="100" lower="-2.1" upper="2.1" velocity="100"/>
+      <limit effort="1" lower="-2.1" upper="2.1" velocity="${46 / 60.0 * 2.0 * pi}"/>
     </joint>
 
   </xacro:macro>
