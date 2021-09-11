@@ -93,7 +93,6 @@
       <xacro:insert_block name="origin" />
       <parent link="${parent}" />
       <child link="joint1_link" />
-      <axis xyz="0 0 1" />
     </joint>
 
     <joint name="joint1" type="revolute">
