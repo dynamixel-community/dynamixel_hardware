@@ -18,7 +18,6 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import ExecuteProcess
 
 import xacro
 
@@ -49,25 +48,22 @@ def generate_launch_description():
             },
         ),
 
-        ExecuteProcess(
-            cmd=["ros2", "control", "load_start_controller",
-                 "joint_state_controller"],
-            output="screen",
-            shell=True,
+        Node(
+            package="controller_manager",
+            executable="spawner.py",
+            arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
         ),
 
-        ExecuteProcess(
-            cmd=["ros2", "control", "load_configure_controller",
-                 "velocity_controller"],
-            output="screen",
-            shell=True,
+        Node(
+            package="controller_manager",
+            executable="spawner.py",
+            arguments=["velocity_controller", "-c", "/controller_manager"],
         ),
 
-        ExecuteProcess(
-            cmd=["ros2", "control", "load_configure_controller",
-                 "joint_trajectory_controller"],
-            output="screen",
-            shell=True,
+        Node(
+            package="controller_manager",
+            executable="spawner.py",
+            arguments=["joint_trajectory_controller", "-c", "/controller_manager"],
         ),
 
         Node(

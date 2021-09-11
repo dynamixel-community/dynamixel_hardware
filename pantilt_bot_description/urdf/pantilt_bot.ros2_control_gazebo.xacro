@@ -5,11 +5,7 @@
 
     <ros2_control name="${name}" type="system">
       <hardware>
-        <plugin>dynamixel_hardware/DynamixelHardware</plugin>
-        <param name="usb_port">/dev/ttyUSB0</param>
-        <param name="baud_rate">1000000</param>
-        <param name="joint_ids">11,12</param>
-        <param name="use_dummy">true</param>
+        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
       </hardware>
       <joint name="joint1">
         <command_interface name="position"/>
@@ -26,6 +22,12 @@
         <state_interface name="effort"/>
       </joint>
     </ros2_control>
+
+    <gazebo>
+      <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+        <parameters>$(find pantilt_bot_description)/controllers/controllers.yaml</parameters>
+      </plugin>
+    </gazebo>
 
   </xacro:macro>
 

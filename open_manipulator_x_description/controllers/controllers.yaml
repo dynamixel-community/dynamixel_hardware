@@ -8,8 +8,8 @@ controller_manager:
     joint_trajectory_controller:
       type: joint_trajectory_controller/JointTrajectoryController
 
-    joint_state_controller:
-      type: joint_state_controller/JointStateController
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
 
 velocity_controller:
   ros__parameters:
@@ -28,3 +28,9 @@ joint_trajectory_controller:
       - joint3
       - joint4
       - gripper
+
+    command_interfaces:
+      - position
+
+    state_interfaces:
+      - position
