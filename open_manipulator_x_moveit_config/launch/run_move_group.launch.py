@@ -57,43 +57,54 @@ def generate_launch_description():
     kinematics_yaml = load_yaml(
         "open_manipulator_x_moveit_config", "config/kinematics.yaml")
 
-    ompl_planning_pipeline_config = {"move_group": {
-        "planning_plugin": "ompl_interface/OMPLPlanner",
-        "request_adapters": "default_planner_request_adapters/AddTimeOptimalParameterization \
-                             default_planner_request_adapters/FixWorkspaceBounds \
-                             default_planner_request_adapters/FixStartStateBounds \
-                             default_planner_request_adapters/FixStartStateCollision \
-                             default_planner_request_adapters/FixStartStatePathConstraints",
-        "start_state_max_bounds_error": 0.1}}
+    ompl_planning_pipeline_config = {
+        "planning_pipelines": ["ompl"],
+        "ompl": {
+            "planning_plugin": "ompl_interface/OMPLPlanner",
+            "request_adapters": "default_planner_request_adapters/AddTimeOptimalParameterization \
+                                 default_planner_request_adapters/FixWorkspaceBounds \
+                                 default_planner_request_adapters/FixStartStateBounds \
+                                 default_planner_request_adapters/FixStartStateCollision \
+                                 default_planner_request_adapters/FixStartStatePathConstraints",
+            "start_state_max_bounds_error": 0.1
+        }
+    }
     ompl_planning_yaml = load_yaml(
         "open_manipulator_x_moveit_config", "config/ompl_planning.yaml")
-    ompl_planning_pipeline_config["move_group"].update(ompl_planning_yaml)
+    ompl_planning_pipeline_config["ompl"].update(ompl_planning_yaml)
 
     controllers_yaml = load_yaml(
         "open_manipulator_x_moveit_config", "config/controllers.yaml")
     moveit_controllers = {
         "moveit_simple_controller_manager": controllers_yaml,
-        "moveit_controller_manager": "moveit_simple_controller_manager/MoveItSimpleControllerManager"}
+        "moveit_controller_manager": "moveit_simple_controller_manager/MoveItSimpleControllerManager"
+    }
 
-    trajectory_execution = {"moveit_manage_controllers": True,
-                            "trajectory_execution.allowed_execution_duration_scaling": 1.2,
-                            "trajectory_execution.allowed_goal_duration_margin": 0.5,
-                            "trajectory_execution.allowed_start_tolerance": 0.1}
+    trajectory_execution = {
+        "moveit_manage_controllers": True,
+        "trajectory_execution.allowed_execution_duration_scaling": 1.2,
+        "trajectory_execution.allowed_goal_duration_margin": 0.5,
+        "trajectory_execution.allowed_start_tolerance": 0.1
+    }
 
-    planning_scene_monitor_parameters = {"publish_planning_scene": True,
-                                         "publish_geometry_updates": True,
-                                         "publish_state_updates": True,
-                                         "publish_transforms_updates": True}
+    planning_scene_monitor_parameters = {
+        "publish_planning_scene": True,
+        "publish_geometry_updates": True,
+        "publish_state_updates": True,
+        "publish_transforms_updates": True
+    }
 
     return LaunchDescription([
         Node(package="moveit_ros_move_group",
              executable="move_group",
              output="screen",
-             parameters=[robot_description,
-                         robot_description_semantic,
-                         kinematics_yaml,
-                         ompl_planning_pipeline_config,
-                         trajectory_execution,
-                         moveit_controllers,
-                         planning_scene_monitor_parameters]),
+             parameters=[
+                 robot_description,
+                 robot_description_semantic,
+                 kinematics_yaml,
+                 ompl_planning_pipeline_config,
+                 trajectory_execution,
+                 moveit_controllers,
+                 planning_scene_monitor_parameters
+             ])
     ])
