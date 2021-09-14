@@ -39,26 +39,6 @@ constexpr const char * kPresentSpeedItem = "Present_Speed";
 constexpr const char * kPresentCurrentItem = "Present_Current";
 constexpr const char * kPresentLoadItem = "Present_Load";
 
-std::vector<std::string> split(const std::string & string, const char & delimiter)
-{
-  auto first = 0u;
-  auto last = string.find_first_of(delimiter);
-  std::vector<std::string> result;
-
-  while (first < string.size()) {
-    result.emplace_back(string, first, last - first);
-
-    first = last + 1;
-    last = string.find_first_of(delimiter, first);
-
-    if (last == std::string::npos) {
-      last = string.size();
-    }
-  }
-
-  return result;
-}
-
 return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo & info)
 {
   RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "configure");
@@ -66,19 +46,11 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
     return return_type::ERROR;
   }
 
-  auto joint_ids = split(info_.hardware_parameters.at("joint_ids"), ',');
   joints_.resize(info_.joints.size(), Joint());
   joint_ids_.resize(info_.joints.size(), 0);
 
-  if (joint_ids.size() != joints_.size()) {
-    RCLCPP_FATAL(
-      rclcpp::get_logger(kDynamixelHardware), "Invalid joint_ids size %d %d", joint_ids.size(),
-      joints_.size());
-    return return_type::ERROR;
-  }
-
   for (uint i = 0; i < info_.joints.size(); i++) {
-    joint_ids_[i] = std::stoi(joint_ids[i]);
+    joint_ids_[i] = std::stoi(info_.joints[i].parameters.at("id"));
     joints_[i].state.position = std::numeric_limits<double>::quiet_NaN();
     joints_[i].state.velocity = std::numeric_limits<double>::quiet_NaN();
     joints_[i].state.effort = std::numeric_limits<double>::quiet_NaN();
