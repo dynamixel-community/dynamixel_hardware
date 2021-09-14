@@ -8,10 +8,10 @@
         <plugin>dynamixel_hardware/DynamixelHardware</plugin>
         <param name="usb_port">/dev/ttyUSB0</param>
         <param name="baud_rate">1000000</param>
-        <param name="joint_ids">11,12,13,14,15</param>
         <!-- <param name="use_dummy">true</param> -->
       </hardware>
       <joint name="joint1">
+        <param name="id">11</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -19,6 +19,7 @@
         <state_interface name="effort"/>
       </joint>
       <joint name="joint2">
+        <param name="id">12</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -26,6 +27,7 @@
         <state_interface name="effort"/>
       </joint>
       <joint name="joint3">
+        <param name="id">13</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -33,6 +35,7 @@
         <state_interface name="effort"/>
       </joint>
       <joint name="joint4">
+        <param name="id">14</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
@@ -40,6 +43,7 @@
         <state_interface name="effort"/>
       </joint>
       <joint name="gripper">
+        <param name="id">15</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <state_interface name="position"/>
