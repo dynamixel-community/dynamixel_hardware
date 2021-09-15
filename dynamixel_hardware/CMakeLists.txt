@@ -19,6 +19,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(hardware_interface REQUIRED)
+find_package(transmission_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(dynamixel_workbench_toolbox REQUIRED)
 
@@ -36,6 +37,7 @@ ament_target_dependencies(
   ${PROJECT_NAME}
   rclcpp
   hardware_interface
+  transmission_interface
   pluginlib
   dynamixel_workbench_toolbox
   )

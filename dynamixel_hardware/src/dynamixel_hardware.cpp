@@ -21,6 +21,7 @@
 #include <limits>
 #include <rclcpp/rclcpp.hpp>
 #include <string>
+#include <transmission_interface/simple_transmission.hpp>
 #include <vector>
 
 namespace dynamixel_hardware

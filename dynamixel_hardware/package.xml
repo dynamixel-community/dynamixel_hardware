@@ -11,6 +11,7 @@
 
   <depend>rclcpp</depend>
   <depend>hardware_interface</depend>
+  <depend>transmission_interface</depend>
   <depend>pluginlib</depend>
   <depend>dynamixel_workbench_toolbox</depend>
 
