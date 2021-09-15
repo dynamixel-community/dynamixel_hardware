@@ -24,10 +24,10 @@
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
 #include <hardware_interface/types/hardware_interface_status_values.hpp>
 #include <map>
+#include <rclcpp/macros.hpp>
 #include <vector>
 
 #include "dynamixel_hardware/visiblity_control.h"
-#include "rclcpp/macros.hpp"
 
 using hardware_interface::return_type;
 
