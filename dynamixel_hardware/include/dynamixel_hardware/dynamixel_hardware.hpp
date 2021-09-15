@@ -96,6 +96,7 @@ private:
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
   std::vector<double> mechanical_reductions_;
+  std::vector<double> mechanical_offsets_;
   bool torque_enabled_{false};
   ControlMode control_mode_{ControlMode::Position};
   bool use_dummy_{false};

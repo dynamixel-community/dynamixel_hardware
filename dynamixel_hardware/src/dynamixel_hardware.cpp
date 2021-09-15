@@ -49,12 +49,16 @@ return_type DynamixelHardware::configure(const hardware_interface::HardwareInfo 
   joints_.resize(info_.joints.size(), Joint());
   joint_ids_.resize(info_.joints.size(), 0);
   mechanical_reductions_.resize(info_.joints.size(), 1.0);
+  mechanical_offsets_.resize(info_.joints.size(), 0.0);
 
   for (uint i = 0; i < info_.joints.size(); i++) {
     joint_ids_[i] = std::stoi(info_.joints[i].parameters.at("id"));
-    mechanical_reductions_[i] = info_.joints[i].parameters.count("mechanical_reduction") > 0
-                                  ? std::stof(info_.joints[i].parameters.at("mechanical_reduction"))
-                                  : 1.0;
+    if (info_.joints[i].parameters.count("mechanical_reduction") > 0) {
+      mechanical_reductions_[i] = std::stof(info_.joints[i].parameters.at("mechanical_reduction"));
+    }
+    if (info_.joints[i].parameters.count("mechanical_offset") > 0) {
+      mechanical_offsets_[i] = std::stof(info_.joints[i].parameters.at("mechanical_offset"));
+    }
     joints_[i].state.position = std::numeric_limits<double>::quiet_NaN();
     joints_[i].state.velocity = std::numeric_limits<double>::quiet_NaN();
     joints_[i].state.effort = std::numeric_limits<double>::quiet_NaN();
@@ -266,9 +270,13 @@ return_type DynamixelHardware::read()
   }
 
   for (uint i = 0; i < ids.size(); i++) {
-    joints_[i].state.position = dynamixel_workbench_.convertValue2Radian(ids[i], positions[i]) / mechanical_reductions_[i];
-    joints_[i].state.velocity = dynamixel_workbench_.convertValue2Velocity(ids[i], velocities[i]) / mechanical_reductions_[i];
-    joints_[i].state.effort = dynamixel_workbench_.convertValue2Current(currents[i]) / mechanical_reductions_[i];
+    joints_[i].state.position =
+      dynamixel_workbench_.convertValue2Radian(ids[i], positions[i]) / mechanical_reductions_[i] +
+      mechanical_offsets_[i];
+    joints_[i].state.velocity =
+      dynamixel_workbench_.convertValue2Velocity(ids[i], velocities[i]) / mechanical_reductions_[i];
+    joints_[i].state.effort =
+      dynamixel_workbench_.convertValue2Current(currents[i]) / mechanical_reductions_[i];
   }
 
   return return_type::OK;
@@ -314,7 +322,8 @@ return_type DynamixelHardware::write()
   set_control_mode(ControlMode::Position);
   for (uint i = 0; i < ids.size(); i++) {
     commands[i] = dynamixel_workbench_.convertRadian2Value(
-      ids[i], static_cast<float>(joints_[i].command.position) * mechanical_reductions_[i]);
+      ids[i], static_cast<float>(joints_[i].command.position) * mechanical_reductions_[i] -
+                mechanical_offsets_[i]);
   }
   if (!dynamixel_workbench_.syncWrite(
         kGoalPositionIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
