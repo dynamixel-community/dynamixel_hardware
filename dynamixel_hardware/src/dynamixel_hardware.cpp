@@ -237,28 +237,28 @@ return_type DynamixelHardware::read()
 
   if (!dynamixel_workbench_.syncRead(
         kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(), &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   if (!dynamixel_workbench_.getSyncReadData(
         kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
         control_items_[kPresentCurrentItem]->address,
         control_items_[kPresentCurrentItem]->data_length, currents.data(), &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   if (!dynamixel_workbench_.getSyncReadData(
         kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
         control_items_[kPresentVelocityItem]->address,
         control_items_[kPresentVelocityItem]->data_length, velocities.data(), &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   if (!dynamixel_workbench_.getSyncReadData(
         kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
         control_items_[kPresentPositionItem]->address,
         control_items_[kPresentPositionItem]->data_length, positions.data(), &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   for (uint i = 0; i < ids.size(); i++) {
@@ -296,13 +296,13 @@ return_type DynamixelHardware::write()
     }
     if (!dynamixel_workbench_.syncWrite(
           kGoalVelocityIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
-      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+      RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
     }
     return return_type::OK;
   } else if (std::any_of(
                joints_.cbegin(), joints_.cend(), [](auto j) { return j.command.effort != 0.0; })) {
     // Effort control
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "Effort control is not implemented");
+    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "Effort control is not implemented");
     return return_type::ERROR;
   }
 
@@ -314,7 +314,7 @@ return_type DynamixelHardware::write()
   }
   if (!dynamixel_workbench_.syncWrite(
         kGoalPositionIndex, ids.data(), ids.size(), commands.data(), 1, &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
   }
 
   return return_type::OK;
