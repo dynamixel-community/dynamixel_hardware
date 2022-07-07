@@ -18,6 +18,8 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(dynamixel_workbench_toolbox REQUIRED)
@@ -35,6 +37,8 @@ target_include_directories(
 ament_target_dependencies(
   ${PROJECT_NAME}
   rclcpp
+  rclcpp_lifecycle
+  lifecycle_msgs
   hardware_interface
   pluginlib
   dynamixel_workbench_toolbox
