@@ -24,8 +24,8 @@ find_package(rviz2 REQUIRED)
 find_package(ros2_control REQUIRED)
 find_package(ros2_controllers REQUIRED)
 find_package(dynamixel_hardware REQUIRED)
-find_package(gazebo_ros REQUIRED)
-find_package(gazebo_ros2_control REQUIRED)
+find_package(ros_ign_gazebo REQUIRED)
+find_package(ign_ros2_control REQUIRED)
 
 install(DIRECTORY
   meshes
