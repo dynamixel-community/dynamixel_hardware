@@ -28,6 +28,7 @@
 #include "dynamixel_hardware/visiblity_control.h"
 #include "rclcpp/macros.hpp"
 
+using hardware_interface::CallbackReturn;
 using hardware_interface::return_type;
 
 namespace dynamixel_hardware
