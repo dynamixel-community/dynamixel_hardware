@@ -226,9 +226,9 @@ CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & pr
       joints_[i].state.effort = 0.0;
     }
   }
-  read();
+  read(rclcpp::Time{}, rclcpp::Duration(0, 0));
   reset_command();
-  write();
+  write(rclcpp::Time{}, rclcpp::Duration(0, 0));
 
   return CallbackReturn::SUCCESS;
 }
@@ -239,7 +239,7 @@ CallbackReturn DynamixelHardware::on_deactivate(const rclcpp_lifecycle::State & 
   return CallbackReturn::SUCCESS;
 }
 
-return_type DynamixelHardware::read()
+return_type DynamixelHardware::read(const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   if (use_dummy_) {
     return return_type::OK;
@@ -288,7 +288,7 @@ return_type DynamixelHardware::read()
   return return_type::OK;
 }
 
-return_type DynamixelHardware::write()
+return_type DynamixelHardware::write(const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   if (use_dummy_) {
     for (auto & joint : joints_) {
