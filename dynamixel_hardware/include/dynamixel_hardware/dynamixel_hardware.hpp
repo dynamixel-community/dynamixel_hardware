@@ -79,10 +79,10 @@ public:
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
-  return_type read() override;
+  return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
-  return_type write() override;
+  return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
   return_type enable_torque(const bool enabled);
