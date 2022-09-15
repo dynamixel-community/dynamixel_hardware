@@ -35,7 +35,7 @@ def generate_launch_description():
     robot_description_config = xacro.process_file(robot_description)
 
     spawn_entity = Node(
-        package="gazebo_ros",
+        package="ros_ign_gazebo",
         executable="spawn_entity.py",
         arguments=["-topic", "robot_description",
                    "-entity", "pantilt_bot"],
@@ -85,7 +85,7 @@ def generate_launch_description():
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([os.path.join(
-                get_package_share_directory("gazebo_ros"), "launch"), "/gazebo.launch.py"]),
+                get_package_share_directory("ros_ign_gazebo"), "launch"), "/gazebo.launch.py"]),
         ),
 
         Node(

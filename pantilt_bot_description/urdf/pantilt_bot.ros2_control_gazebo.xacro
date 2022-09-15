@@ -5,7 +5,7 @@
 
     <ros2_control name="${name}" type="system">
       <hardware>
-        <plugin>gazebo_ros2_control/GazeboSystem</plugin>
+        <plugin>ign_ros2_control/IgnitionSystem</plugin>
       </hardware>
       <joint name="joint1">
         <command_interface name="position"/>
@@ -24,7 +24,7 @@
     </ros2_control>
 
     <gazebo>
-      <plugin filename="libgazebo_ros2_control.so" name="gazebo_ros2_control">
+      <plugin filename="libign_ros2_control-system.so" name="ign_ros2_control::IgnitionROS2ControlPlugin">
         <parameters>$(find pantilt_bot_description)/controllers/controllers.yaml</parameters>
       </plugin>
     </gazebo>
