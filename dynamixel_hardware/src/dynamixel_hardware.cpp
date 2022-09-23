@@ -288,7 +288,7 @@ return_type DynamixelHardware::read(const rclcpp::Time & /* time */, const rclcp
   return return_type::OK;
 }
 
-return_type DynamixelHardware::write(const rclcpp::Time &, const rclcpp::Duration &)
+return_type DynamixelHardware::write(const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
 {
   if (use_dummy_) {
     for (auto & joint : joints_) {
