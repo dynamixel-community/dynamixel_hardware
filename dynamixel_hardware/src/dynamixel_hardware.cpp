@@ -233,7 +233,7 @@ CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /*
   return CallbackReturn::SUCCESS;
 }
 
-CallbackReturn DynamixelHardware::on_deactivate(const rclcpp_lifecycle::State &)
+CallbackReturn DynamixelHardware::on_deactivate(const rclcpp_lifecycle::State & /* previous_state */)
 {
   RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "stop");
   return CallbackReturn::SUCCESS;
