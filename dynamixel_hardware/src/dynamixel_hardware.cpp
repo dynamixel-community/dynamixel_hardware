@@ -239,7 +239,7 @@ CallbackReturn DynamixelHardware::on_deactivate(const rclcpp_lifecycle::State & 
   return CallbackReturn::SUCCESS;
 }
 
-return_type DynamixelHardware::read(const rclcpp::Time &, const rclcpp::Duration &)
+return_type DynamixelHardware::read(const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
 {
   if (use_dummy_) {
     return return_type::OK;
