@@ -216,7 +216,7 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
   return command_interfaces;
 }
 
-CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State &)
+CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /* previous_state */)
 {
   RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "start");
   for (uint i = 0; i < joints_.size(); i++) {
