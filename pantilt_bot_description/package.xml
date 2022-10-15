@@ -22,6 +22,7 @@
   <depend>dynamixel_hardware</depend>
   <depend>realsense2_description</depend>
   <depend>ros_ign_gazebo</depend>
+  <depend>ros_gz_bridge</depend>
   <depend>ign_ros2_control</depend>
 
   <test_depend>ament_lint_auto</test_depend>
