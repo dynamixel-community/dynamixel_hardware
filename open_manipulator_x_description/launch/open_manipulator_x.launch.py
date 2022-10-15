@@ -42,28 +42,28 @@ def generate_launch_description():
             executable="ros2_control_node",
             parameters=[
                 {"robot_description": robot_description_config.toxml()}, controller_config],
-            output={
-                "stdout": "screen",
-                "stderr": "screen",
-            },
+            output="screen",
         ),
 
         Node(
             package="controller_manager",
             executable="spawner",
             arguments=["joint_state_broadcaster", "--controller-manager", "/controller_manager"],
+            output="screen",
         ),
 
         Node(
             package="controller_manager",
             executable="spawner",
             arguments=["velocity_controller", "-c", "/controller_manager"],
+            output="screen",
         ),
 
         Node(
             package="controller_manager",
             executable="spawner",
             arguments=["joint_trajectory_controller", "-c", "/controller_manager"],
+            output="screen",
         ),
 
         Node(
@@ -72,17 +72,15 @@ def generate_launch_description():
             name="robot_state_publisher",
             parameters=[
                 {"robot_description": robot_description_config.toxml()}],
-            output="screen"),
+            output="screen",
+        ),
 
         Node(
             package="rviz2",
             executable="rviz2",
             name="rviz2",
             arguments=["-d", rviz_config],
-            output={
-                "stdout": "screen",
-                "stderr": "log",
-            },
+            output="screen",
         )
 
     ])
