@@ -9,11 +9,11 @@ The `dynamixel_hardware` package is hopefully compatible any configuration of RO
 
 ## Set up
 
-First [install ROS 2 Foxy on Ubuntu 20.04](https://index.ros.org/doc/ros2/Installation/Foxy/Linux-Install-Debians/). Then follow the instruction below.
+First [install ROS 2 Humble on Ubuntu 22.04](http://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html). Then follow the instruction below.
 
 ```shell
-$ source /opt/ros/foxy/setup.bash
-$ mkdir -p ~/ros/foxy && cd ~/ros/foxy
+$ source /opt/ros/humble/setup.bash
+$ mkdir -p ~/ros/humble && cd ~/ros/humble
 $ git clone https://github.com/youtalk/dynamixel_control.git src
 $ vcs import src < src/dynamixel_control.repos
 $ rosdep install --from-paths src --ignore-src -r -y
@@ -52,7 +52,7 @@ $ ros2 launch open_manipulator_x_description open_manipulator_x.launch.py
 Start the `joint_trajectory_controller` and send a `/joint_trajectory_controller/follow_joint_trajectory` goal to move the OpenManipulator-X.
 
 ```shell
-$ ros2 control switch_controllers --start joint_state_broadcaster --start joint_trajectory_controller --stop velocity_controller
+$ ros2 control switch_controllers --activate joint_state_broadcaster --activate joint_trajectory_controller --deactivate velocity_controller
 $ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory control_msgs/action/FollowJointTrajectory -f "{
   trajectory: {
     joint_names: [joint1, joint2, joint3, joint4, gripper],
@@ -68,7 +68,7 @@ $ ros2 action send_goal /joint_trajectory_controller/follow_joint_trajectory con
 If you would like to use the velocity control instead, switch to the `velocity_controller` and publish a `/velocity_controller/commands` message to move the OpenManipulator-X.
 
 ```shell
-$ ros2 control switch_controllers --start joint_state_broadcaster --stop joint_trajectory_controller --start velocity_controller
+$ ros2 control switch_controllers --activate joint_state_broadcaster --deactivate joint_trajectory_controller --activate velocity_controller
 $ ros2 topic pub /velocity_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.1, 0.1, 0.1, 0]"
 ```
 
