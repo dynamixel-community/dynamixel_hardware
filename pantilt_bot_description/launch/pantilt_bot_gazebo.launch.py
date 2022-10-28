@@ -44,13 +44,13 @@ def generate_launch_description():
 
     # Launching gazebo.launch.py is comsumed more than 1 minute somehow...
     joint_state_broadcaster = ExecuteProcess(
-        cmd=["ros2", "control", "load_controller", "--set-state", "start", "--spin-time", "120",
+        cmd=["ros2", "control", "load_controller", "--set-state", "active", "--spin-time", "120",
              "joint_state_broadcaster"],
         output="screen"
     )
 
     joint_trajectory_controller = ExecuteProcess(
-        cmd=["ros2", "control", "load_controller", "--set-state", "start",
+        cmd=["ros2", "control", "load_controller", "--set-state", "active",
              "joint_trajectory_controller"],
         output="screen"
     )
