@@ -42,7 +42,7 @@ def generate_launch_description():
         output="screen"
     )
 
-    # Launching gazebo.launch.py is comsumed more than 1 minute somehow...
+    # Launching ign_gazebo.launch.py is comsumed more than 1 minute somehow...
     joint_state_broadcaster = ExecuteProcess(
         cmd=["ros2", "control", "load_controller", "--set-state", "start", "--spin-time", "120",
              "joint_state_broadcaster"],
@@ -85,7 +85,7 @@ def generate_launch_description():
 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource([os.path.join(
-                get_package_share_directory("ros_ign_gazebo"), "launch"), "/gazebo.launch.py"]),
+                get_package_share_directory("ros_ign_gazebo"), "launch"), "/ign_gazebo.launch.py"])
         ),
 
         Node(
