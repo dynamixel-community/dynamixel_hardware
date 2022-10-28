@@ -9,11 +9,11 @@ The `dynamixel_hardware` package is hopefully compatible any configuration of RO
 
 ## Set up
 
-First [install ROS 2 Humble on Ubuntu 22.04](http://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html). Then follow the instruction below.
+First [install ROS 2 Rolling on Ubuntu 22.04](http://docs.ros.org/en/rolling/Installation/Ubuntu-Install-Debians.html). Then follow the instruction below.
 
 ```shell
-$ source /opt/ros/humble/setup.bash
-$ mkdir -p ~/ros/humble && cd ~/ros/humble
+$ source /opt/ros/rolling/setup.bash
+$ mkdir -p ~/ros/rolling && cd ~/ros/rolling
 $ git clone https://github.com/youtalk/dynamixel_control.git src
 $ vcs import src < src/dynamixel_control.repos
 $ rosdep install --from-paths src --ignore-src -r -y
