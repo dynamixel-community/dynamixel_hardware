@@ -34,9 +34,9 @@ def generate_launch_description():
         package_name), "urdf", robot_name + ".urdf.xacro")
     robot_description_config = xacro.process_file(robot_description)
 
-    spawn_entity = Node(
+    create = Node(
         package="ros_ign_gazebo",
-        executable="spawn_entity.py",
+        executable="create",
         arguments=["-topic", "robot_description",
                    "-entity", "pantilt_bot"],
         output="screen"
@@ -64,7 +64,7 @@ def generate_launch_description():
     return LaunchDescription([
         RegisterEventHandler(
             event_handler=OnProcessExit(
-                target_action=spawn_entity,
+                target_action=create,
                 on_exit=[joint_state_broadcaster],
             )
         ),
@@ -96,7 +96,7 @@ def generate_launch_description():
                 {"robot_description": robot_description_config.toxml()}],
             output="screen"),
 
-        spawn_entity,
+        create,
 
         Node(
             package="rviz2",
