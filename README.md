@@ -1,11 +1,10 @@
-# dynamixel_control
+# dynamixel_hardware
 
 The [`ros2_control`](https://github.com/ros-controls/ros2_control) implementation for any kind of [ROBOTIS Dynamixel](https://emanual.robotis.com/docs/en/dxl/) robots.
 
-- `dynamixel_hardware`: the [`SystemInterface`](https://github.com/ros-controls/ros2_control/blob/master/hardware_interface/include/hardware_interface/system_interface.hpp) implementation for the multiple ROBOTIS Dynamixel servos.
-- `open_manipulator_x_description`: the reference implementation of the `ros2_control` robot using [ROBOTIS OpenManipulator-X](https://emanual.robotis.com/docs/en/platform/openmanipulator_x/overview/).
+The `dynamixel_hardware` package is the [`SystemInterface`](https://github.com/ros-controls/ros2_control/blob/master/hardware_interface/include/hardware_interface/system_interface.hpp) implementation for the multiple ROBOTIS Dynamixel servos.
 
-The `dynamixel_hardware` package is hopefully compatible any configuration of ROBOTIS Dynamixel servos thanks to the `ros2_control`'s flexible architecture.
+It is hopefully compatible any configuration of ROBOTIS Dynamixel servos thanks to the `ros2_control`'s flexible architecture.
 
 ## Set up
 
@@ -13,9 +12,10 @@ First [install ROS 2 Rolling on Ubuntu 22.04](http://docs.ros.org/en/rolling/Ins
 
 ```shell
 $ source /opt/ros/rolling/setup.bash
-$ mkdir -p ~/ros/rolling && cd ~/ros/rolling
-$ git clone https://github.com/youtalk/dynamixel_control.git src
-$ vcs import src < src/dynamixel_control.repos
+$ mkdir -p ~/ros/rolling && cd ~/ros/rolling/src
+$ git clone https://github.com/youtalk/dynamixel_hardware.git
+$ git clone https://github.com/youtalk/dynamixel_hardware_examples.git
+$ cd -
 $ rosdep install --from-paths src --ignore-src -r -y
 $ colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 $ . install/setup.bash
@@ -25,7 +25,7 @@ $ . install/setup.bash
 
 ### Configure Dynamixel motor parameters
 
-Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_hardware_examples/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
 The `use_dummy` parameter is required if you don't have a real OpenManipulator-X.
 
 Note that `joint_ids` parameters must be splited by `,`.
