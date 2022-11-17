@@ -2,8 +2,8 @@
 Changelog for package dynamixel_hardware
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.3.1 (2022-11-17)
+------------------
 * Merge pull request `#39 <https://github.com/youtalk/dynamixel_control/issues/39>`_ from ijnek/ijnek-unused-parameters
 * Merge pull request `#31 <https://github.com/youtalk/dynamixel_control/issues/31>`_ from ijnek/ijnek-unused-parameter-2
 * Merge pull request `#25 <https://github.com/youtalk/dynamixel_control/issues/25>`_ from ijnek/ijnek-new-hardware-interface
