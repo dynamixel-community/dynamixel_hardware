@@ -43,7 +43,7 @@ constexpr const char * const kExtraJointParameters[] = {
   "Profile_Acceleration",
   "Position_P_Gain",
   "Position_I_Gain",
-  "Position_D_Gain"
+  "Position_D_Gain",
   "Velocity_P_Gain",
   "Velocity_I_Gain",
 };
