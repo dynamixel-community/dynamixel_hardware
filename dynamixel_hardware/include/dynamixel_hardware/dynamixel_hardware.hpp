@@ -44,6 +44,7 @@ struct Joint
 {
   JointValue state{};
   JointValue command{};
+  JointValue prev_command{};
 };
 
 enum class ControlMode {
@@ -91,12 +92,17 @@ private:
 
   return_type reset_command();
 
+  CallbackReturn set_joint_positions();
+  CallbackReturn set_joint_velocities();
+  CallbackReturn set_joint_params();
+
   DynamixelWorkbench dynamixel_workbench_;
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
   bool torque_enabled_{false};
   ControlMode control_mode_{ControlMode::Position};
+  bool mode_changed_{false};
   bool use_dummy_{false};
 };
 }  // namespace dynamixel_hardware
