@@ -303,7 +303,6 @@ return_type DynamixelHardware::write(const rclcpp::Time & /* time */, const rclc
   }
   
   // Position control
-  // Dynamixel command positions may be non-zero (but unchanging) when in  )
   if (std::any_of(
         joints_.cbegin(), joints_.cend(), [](auto j) { return j.command.position != j.prev_command.position; })) {
     set_control_mode(ControlMode::Position);
