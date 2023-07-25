@@ -22,10 +22,10 @@ jobs:
       image: ubuntu:jammy
 
     steps:
-      - uses: ros-tooling/setup-ros@v0.3
+      - uses: ros-tooling/setup-ros@v0.6
         with:
           # The testing repository will be used
           use-ros2-testing: true
-      - uses: ros-tooling/action-ros-ci@v0.2
+      - uses: ros-tooling/action-ros-ci@v0.3
         with:
           target-ros2-distro: rolling

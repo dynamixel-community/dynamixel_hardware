@@ -1,14 +1,14 @@
-name: Build and Test (foxy)
+name: Build and Test (iron)
 
 # Controls when the action will run.
 on:
   # Triggers the workflow on push
   push:
-    branches: [ foxy ]
+    branches: [ rolling ]
 
   # Triggers the workflow on pull requests
   pull_request:
-    branches: [ foxy ]
+    branches: [ rolling ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -16,17 +16,16 @@ on:
 jobs:
   # This workflow contains a single job called "build"
   build:
-    # The runner will be ubuntu-latest, with a clean ubuntu focal container
+    # The runner will be ubuntu-latest, with a clean ubuntu jammy container
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:focal
+      image: ubuntu:jammy
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - uses: ros-tooling/setup-ros@v0.3
+      - uses: ros-tooling/setup-ros@v0.6
         with:
           # The testing repository will be used
           use-ros2-testing: true
-      - uses: ros-tooling/action-ros-ci@v0.2
+      - uses: ros-tooling/action-ros-ci@v0.3
         with:
-          target-ros2-distro: foxy
+          target-ros2-distro: iron
