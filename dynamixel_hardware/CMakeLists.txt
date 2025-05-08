@@ -34,8 +34,8 @@ target_include_directories(
   PRIVATE
   include
 )
-ament_target_dependencies(
-  ${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME}
+  PUBLIC
   rclcpp
   rclcpp_lifecycle
   lifecycle_msgs
