@@ -29,31 +29,29 @@ add_library(
   SHARED
   src/dynamixel_hardware.cpp
 )
-target_include_directories(
-  ${PROJECT_NAME}
-  PRIVATE
-  include
-)
-ament_target_dependencies(
-  ${PROJECT_NAME}
-  rclcpp
-  rclcpp_lifecycle
-  lifecycle_msgs
-  hardware_interface
-  pluginlib
-  dynamixel_workbench_toolbox
-)
-
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+target_link_libraries(${PROJECT_NAME} PUBLIC
+  ${lifecycle_msgs_TARGETS}
+  dynamixel_workbench_toolbox::dynamixel_workbench_toolbox
+  hardware_interface::hardware_interface
+  pluginlib::pluginlib
+  rclcpp_lifecycle::rclcpp_lifecycle
+  rclcpp::rclcpp)
 
 pluginlib_export_plugin_description_file(hardware_interface dynamixel_hardware.xml)
 
 install(
   TARGETS ${PROJECT_NAME}
-  DESTINATION lib
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 install(
   DIRECTORY include/
-  DESTINATION include
+  DESTINATION include/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
@@ -67,12 +65,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_export_include_directories(
-  include
-)
-ament_export_libraries(
-  ${PROJECT_NAME}
-)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   rclcpp
   hardware_interface
