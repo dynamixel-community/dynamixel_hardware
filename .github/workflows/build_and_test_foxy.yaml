@@ -27,6 +27,6 @@ jobs:
         with:
           # The testing repository will be used
           use-ros2-testing: true
-      - uses: ros-tooling/action-ros-ci@v0.3
+      - uses: ros-tooling/action-ros-ci@v0.4
         with:
           target-ros2-distro: foxy
