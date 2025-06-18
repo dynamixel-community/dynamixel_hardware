@@ -38,6 +38,7 @@ constexpr const char * kPresentVelocityItem = "Present_Velocity";
 constexpr const char * kPresentSpeedItem = "Present_Speed";
 constexpr const char * kPresentCurrentItem = "Present_Current";
 constexpr const char * kPresentLoadItem = "Present_Load";
+constexpr const char * kReturnDelayTimeItem = "Return_Delay_Time";
 constexpr const char * const kExtraJointParameters[] = {
   "Profile_Velocity",
   "Profile_Acceleration",
@@ -83,10 +84,12 @@ CallbackReturn DynamixelHardware::on_init(const hardware_interface::HardwareInfo
 
   auto usb_port = info_.hardware_parameters.at("usb_port");
   auto baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
+  auto return_delay_time = std::stoi(info_.hardware_parameters.at("return_delay_time"));
   const char * log = nullptr;
 
   RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "usb_port: %s", usb_port.c_str());
   RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "baud_rate: %d", baud_rate);
+  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "return_delay_time: %d", return_delay_time);
 
   if (!dynamixel_workbench_.init(usb_port.c_str(), baud_rate, &log)) {
     RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
@@ -98,6 +101,16 @@ CallbackReturn DynamixelHardware::on_init(const hardware_interface::HardwareInfo
     if (!dynamixel_workbench_.ping(joint_ids_[i], &model_number, &log)) {
       RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
       return CallbackReturn::ERROR;
+    }
+    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Ping successful for ID %d, Model number: %d", joint_ids_[i], model_number);
+    int32_t current_return_delay_time = 0;
+    if (dynamixel_workbench_.itemRead(joint_ids_[i], kReturnDelayTimeItem, &current_return_delay_time, &log) && current_return_delay_time != return_delay_time)
+    {
+      if (!dynamixel_workbench_.itemWrite(joint_ids_[i], kReturnDelayTimeItem, return_delay_time, &log)) {
+        RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+        return CallbackReturn::ERROR;
+      }
+      RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Successfully set return delay time for ID %d from %d to %d.", joint_ids_[i], current_return_delay_time, return_delay_time); 
     }
   }
 

@@ -25,7 +25,8 @@ $ . install/setup.bash
 
 ### Configure Dynamixel motor parameters
 
-Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+Update the `usb_port`, `baud_rate`, `return_delay_time` and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_control/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+The `return_delay_time` sets the amount of delay in microseconds before they respond to a packet.
 The `use_dummy` parameter is required if you don't have a real OpenManipulator-X.
 
 Note that `joint_ids` parameters must be splited by `,`.
@@ -35,6 +36,7 @@ Note that `joint_ids` parameters must be splited by `,`.
   <plugin>dynamixel_hardware/DynamixelHardware</plugin>
   <param name="usb_port">/dev/ttyUSB0</param>
   <param name="baud_rate">1000000</param>
+  <param name="return_delay_time">10</param>
   <!-- <param name="use_dummy">true</param> -->
 </hardware>
 ```
@@ -86,6 +88,7 @@ index c6cdb74..111846d 100644
 @@ -9,7 +9,7 @@
          <param name="usb_port">/dev/ttyUSB0</param>
          <param name="baud_rate">1000000</param>
+         <param name="return_delay_time">250</param>
 -        <!-- <param name="use_dummy">true</param> -->
 +        <param name="use_dummy">true</param>
        </hardware>
