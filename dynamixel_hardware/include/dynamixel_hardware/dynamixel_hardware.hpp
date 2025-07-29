@@ -101,7 +101,8 @@ private:
   std::map<const char * const, const ControlItem *> control_items_;
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
-  bool torque_enabled_{false};
+  bool should_enable_torque_{false}; // True if torque should be enabled. False otherwise.
+  bool torque_enabled_{false}; // True if torque is enabled. False otherwise.
   ControlMode control_mode_{ControlMode::Position};
   bool mode_changed_{false};
   bool use_dummy_{false};

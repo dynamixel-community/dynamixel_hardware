@@ -82,6 +82,15 @@ CallbackReturn DynamixelHardware::on_init(
     return CallbackReturn::SUCCESS;
   }
 
+  if (
+    info_.hardware_parameters.find("enable_torque") != info_.hardware_parameters.end() &&
+    info_.hardware_parameters.at("enable_torque") == "false")
+  {
+    should_enable_torque_ = false;
+  } else {
+    should_enable_torque_ = true;
+  }
+
   auto usb_port = info_.hardware_parameters.at("usb_port");
   auto baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
   const char * log = nullptr;
@@ -105,7 +114,9 @@ CallbackReturn DynamixelHardware::on_init(
   enable_torque(false);
   set_control_mode(ControlMode::Position, true);
   set_joint_params();
-  enable_torque(true);
+  if (should_enable_torque_) {
+    enable_torque(true);
+  }
 
   const ControlItem * goal_position =
     dynamixel_workbench_.getItemInfo(joint_ids_[0], kGoalPositionItem);
@@ -411,7 +422,7 @@ return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const 
       control_mode_ = ControlMode::Velocity;
     }
 
-    if (torque_enabled) {
+    if (torque_enabled && should_enable_torque_) {
       enable_torque(true);
     }
     return return_type::OK;
@@ -435,7 +446,7 @@ return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const 
       control_mode_ = ControlMode::Position;
     }
 
-    if (torque_enabled) {
+    if (torque_enabled && should_enable_torque_) {
       enable_torque(true);
     }
     return return_type::OK;
