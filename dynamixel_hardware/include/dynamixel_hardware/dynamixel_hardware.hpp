@@ -94,6 +94,7 @@ private:
 
   CallbackReturn set_joint_positions();
   CallbackReturn set_joint_velocities();
+  CallbackReturn set_joint_efforts();
   CallbackReturn set_joint_params();
 
   DynamixelWorkbench dynamixel_workbench_;
