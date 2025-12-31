@@ -65,6 +65,19 @@ if(BUILD_TESTING)
   # uncomment the line when this package is not in a git repo
   #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gmock REQUIRED)
+  find_package(ros2_control_test_assets REQUIRED)
+
+  ament_add_gmock(test_dynamixel_hardware test/test_dynamixel_hardware.cpp)
+  target_include_directories(test_dynamixel_hardware PRIVATE include)
+  target_link_libraries(test_dynamixel_hardware ${PROJECT_NAME})
+  ament_target_dependencies(
+    test_dynamixel_hardware
+    hardware_interface
+    pluginlib
+    ros2_control_test_assets
+  )
 endif()
 
 ament_export_include_directories(
