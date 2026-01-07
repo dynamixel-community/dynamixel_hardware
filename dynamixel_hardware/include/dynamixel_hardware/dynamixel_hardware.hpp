@@ -65,7 +65,8 @@ public:
   RCLCPP_SHARED_PTR_DEFINITIONS(DynamixelHardware)
 
   DYNAMIXEL_HARDWARE_PUBLIC
-  CallbackReturn on_init(const hardware_interface::HardwareInfo & info) override;
+  CallbackReturn on_init(
+    const hardware_interface::HardwareComponentInterfaceParams & params) override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;

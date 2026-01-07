@@ -48,10 +48,11 @@ constexpr const char * const kExtraJointParameters[] = {
   "Velocity_I_Gain",
 };
 
-CallbackReturn DynamixelHardware::on_init(const hardware_interface::HardwareInfo & info)
+CallbackReturn DynamixelHardware::on_init(
+  const hardware_interface::HardwareComponentInterfaceParams & params)
 {
   RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "configure");
-  if (hardware_interface::SystemInterface::on_init(info) != CallbackReturn::SUCCESS) {
+  if (hardware_interface::SystemInterface::on_init(params) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
   }
 
