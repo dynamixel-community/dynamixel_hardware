@@ -3,9 +3,12 @@
 <package format="3">
   <name>dynamixel_hardware</name>
   <version>0.6.1</version>
-  <description>ros2_control hardware for ROBOTIS Dynamixel</description>
+  <description>ros2_control hardware interface for ROBOTIS Dynamixel servo motors</description>
   <maintainer email="yutaka.kondo@youtalk.jp">Yutaka Kondo</maintainer>
-  <license>Apache 2.0</license>
+  <license>Apache-2.0</license>
+
+  <url type="repository">https://github.com/dynamixel-community/dynamixel_hardware</url>
+  <url type="bugtracker">https://github.com/dynamixel-community/dynamixel_hardware/issues</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
