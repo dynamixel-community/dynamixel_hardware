@@ -26,6 +26,7 @@
 #include <rclcpp_lifecycle/state.hpp>
 
 #include "dynamixel_hardware/visibility_control.h"
+#include "dynamixel_hardware/dynamixel_driver.hpp"
 #include "rclcpp/macros.hpp"
 
 using hardware_interface::CallbackReturn;
@@ -45,18 +46,6 @@ struct Joint
   JointValue state{};
   JointValue command{};
   JointValue prev_command{};
-};
-
-enum class ControlMode
-{
-  Position,
-  Velocity,
-  Torque,
-  Currrent,
-  ExtendedPosition,
-  MultiTurn,
-  CurrentBasedPosition,
-  PWM,
 };
 
 class DynamixelHardware : public hardware_interface::SystemInterface
