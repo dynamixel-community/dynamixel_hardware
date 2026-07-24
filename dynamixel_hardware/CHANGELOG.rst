@@ -2,8 +2,8 @@
 Changelog for package dynamixel_hardware
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.1 (2026-07-24)
+------------------
 * Link namespaced CMake targets instead of ament_target_dependencies
 * Update the deprecated on_init function to use new parameter type (`#108 <https://github.com/dynamixel-community/dynamixel_hardware/issues/108>`_)
 * Contributors: Yutaka Kondo, Zheng Qu
