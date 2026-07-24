@@ -1,15 +1,5 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.16)
 project(dynamixel_hardware)
-
-# Default to C99
-if(NOT CMAKE_C_STANDARD)
-  set(CMAKE_C_STANDARD 99)
-endif()
-
-# Default to C++14
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -24,57 +14,56 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(dynamixel_workbench_toolbox REQUIRED)
 
-add_library(
-  ${PROJECT_NAME}
-  SHARED
+# hardware_interface >= 6.7.1 (lyrical/rolling) requires C++20; C++17 otherwise.
+if(NOT CMAKE_CXX_STANDARD)
+  if(hardware_interface_VERSION VERSION_GREATER_EQUAL 6.7.1)
+    set(CMAKE_CXX_STANDARD 20)
+  else()
+    set(CMAKE_CXX_STANDARD 17)
+  endif()
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(${PROJECT_NAME} SHARED
   src/dynamixel_hardware.cpp
 )
-target_include_directories(
-  ${PROJECT_NAME}
-  PRIVATE
-  include
+target_include_directories(${PROJECT_NAME} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-target_link_libraries(
-  ${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME} PUBLIC
   ${lifecycle_msgs_TARGETS}
   dynamixel_workbench_toolbox::dynamixel_workbench_toolbox
   hardware_interface::hardware_interface
   pluginlib::pluginlib
-  rclcpp_lifecycle::rclcpp_lifecycle
   rclcpp::rclcpp
+  rclcpp_lifecycle::rclcpp_lifecycle
 )
-
 
 pluginlib_export_plugin_description_file(hardware_interface dynamixel_hardware.xml)
 
 install(
   TARGETS ${PROJECT_NAME}
-  DESTINATION lib
+  EXPORT export_${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 install(
   DIRECTORY include/
-  DESTINATION include
+  DESTINATION include/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # uncomment the line when a copyright and license is not present in all source files
-  #set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # uncomment the line when this package is not in a git repo
-  #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-ament_export_include_directories(
-  include
-)
-ament_export_libraries(
-  ${PROJECT_NAME}
-)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   rclcpp
+  rclcpp_lifecycle
+  lifecycle_msgs
   hardware_interface
   pluginlib
   dynamixel_workbench_toolbox
