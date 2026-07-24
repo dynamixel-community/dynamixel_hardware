@@ -25,7 +25,7 @@
 #include <hardware_interface/system_interface.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 
-#include "dynamixel_hardware/visiblity_control.h"
+#include "dynamixel_hardware/visibility_control.h"
 #include "rclcpp/macros.hpp"
 
 using hardware_interface::CallbackReturn;
