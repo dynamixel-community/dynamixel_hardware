@@ -34,14 +34,14 @@ target_include_directories(
   PRIVATE
   include
 )
-ament_target_dependencies(
+target_link_libraries(
   ${PROJECT_NAME}
-  rclcpp
-  rclcpp_lifecycle
-  lifecycle_msgs
-  hardware_interface
-  pluginlib
-  dynamixel_workbench_toolbox
+  ${lifecycle_msgs_TARGETS}
+  dynamixel_workbench_toolbox::dynamixel_workbench_toolbox
+  hardware_interface::hardware_interface
+  pluginlib::pluginlib
+  rclcpp_lifecycle::rclcpp_lifecycle
+  rclcpp::rclcpp
 )
 
 
