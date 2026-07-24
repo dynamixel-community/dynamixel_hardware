@@ -1,0 +1,112 @@
+name: Nightly
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {distro: humble, branch: humble}
+          - {distro: jazzy, branch: jazzy}
+          - {distro: lyrical, branch: lyrical}
+          - {distro: rolling, branch: rolling}
+    container:
+      image: ros:${{ matrix.distro }}-ros-base
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          path: src/dynamixel_hardware
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-nightly-${{ matrix.distro }}-${{ github.sha }}
+          restore-keys: ccache-nightly-${{ matrix.distro }}-
+      - name: Install dependencies
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y ccache
+          rosdep update
+          # rolling: tolerate missing binaries during the Ubuntu-resolute transition
+          rosdep install --from-paths src --ignore-src -y -r
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon build --symlink-install --event-handlers console_cohesion+ --cmake-args -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Test
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+          colcon test-result --all --verbose
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-nightly-${{ matrix.distro }}
+          path: |
+            build/*/test_results/**/*.xml
+            log/
+  downstream-examples:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {distro: humble, branch: humble}
+          - {distro: jazzy, branch: jazzy}
+          - {distro: lyrical, branch: lyrical}
+          - {distro: rolling, branch: rolling}
+    container:
+      image: ros:${{ matrix.distro }}-ros-base
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          path: src/dynamixel_hardware
+      - name: Check out dynamixel_hardware_examples
+        shell: bash
+        run: |
+          git clone -b ${{ matrix.branch }} https://github.com/dynamixel-community/dynamixel_hardware_examples src/dynamixel_hardware_examples
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-downstream-${{ matrix.distro }}-${{ github.sha }}
+          restore-keys: ccache-downstream-${{ matrix.distro }}-
+      - name: Install dependencies
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y ccache
+          rosdep update
+          # rolling: tolerate missing binaries during the Ubuntu-resolute transition
+          rosdep install --from-paths src --ignore-src -y -r
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          colcon build --symlink-install --event-handlers console_cohesion+ --cmake-args -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Test
+        shell: bash
+        run: |
+          source /opt/ros/${{ matrix.distro }}/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+          colcon test-result --all --verbose
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-downstream-${{ matrix.distro }}
+          path: |
+            build/*/test_results/**/*.xml
+            log/
