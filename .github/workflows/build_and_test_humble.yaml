@@ -1,31 +1,52 @@
 name: Build and Test (humble)
-
-# Controls when the action will run.
 on:
-  # Triggers the workflow on push
   push:
-    branches: [ humble ]
-
-  # Triggers the workflow on pull requests
+    branches: [humble]
   pull_request:
-    branches: [ humble ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [humble, rolling]
   workflow_dispatch:
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The runner will be ubuntu-latest, with a clean ubuntu jammy container
+  build-and-test:
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:jammy
-
+      image: ros:humble-ros-base
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
     steps:
-      - uses: ros-tooling/setup-ros@v0.7
+      - uses: actions/checkout@v4
         with:
-          # The testing repository will be used
-          use-ros2-testing: true
-      - uses: ros-tooling/action-ros-ci@v0.4
+          path: src/dynamixel_hardware
+      - uses: actions/cache@v4
         with:
-          target-ros2-distro: humble
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-humble-${{ github.sha }}
+          restore-keys: ccache-humble-
+      - name: Install dependencies
+        shell: bash
+        run: |
+          apt-get update
+          apt-get install -y ccache
+          rosdep update
+          rosdep install --from-paths src --ignore-src -y
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --symlink-install --event-handlers console_cohesion+ --cmake-args -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Test
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
+          colcon test-result --all --verbose
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-humble
+          path: |
+            build/*/test_results/**/*.xml
+            log/

@@ -1,9 +1,9 @@
-name: Build and Test (rolling)
+name: Build and Test (jazzy)
 on:
   push:
-    branches: [rolling]
+    branches: [jazzy]
   pull_request:
-    branches: [rolling]
+    branches: [jazzy, rolling]
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,7 +12,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     container:
-      image: ros:rolling-ros-base
+      image: ros:jazzy-ros-base
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
     steps:
@@ -22,32 +22,31 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-rolling-${{ github.sha }}
-          restore-keys: ccache-rolling-
+          key: ccache-jazzy-${{ github.sha }}
+          restore-keys: ccache-jazzy-
       - name: Install dependencies
         shell: bash
         run: |
           apt-get update
           apt-get install -y ccache
           rosdep update
-          # rolling: tolerate missing binaries during the Ubuntu-resolute transition
-          rosdep install --from-paths src --ignore-src -y -r
+          rosdep install --from-paths src --ignore-src -y
       - name: Build
         shell: bash
         run: |
-          source /opt/ros/rolling/setup.bash
+          source /opt/ros/jazzy/setup.bash
           colcon build --symlink-install --event-handlers console_cohesion+ --cmake-args -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Test
         shell: bash
         run: |
-          source /opt/ros/rolling/setup.bash
+          source /opt/ros/jazzy/setup.bash
           source install/setup.bash
           colcon test --event-handlers console_cohesion+ --return-code-on-test-failure
           colcon test-result --all --verbose
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: test-results-rolling
+          name: test-results-jazzy
           path: |
             build/*/test_results/**/*.xml
             log/
