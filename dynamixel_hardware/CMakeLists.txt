@@ -92,6 +92,56 @@ if(BUILD_TESTING)
     rclcpp_lifecycle::rclcpp_lifecycle
     ros2_control_test_assets::ros2_control_test_assets
   )
+
+  # controller_manager has no installable rolling binaries during the
+  # Ubuntu-resolute transition (released in rosdistro, buildfarm not yet
+  # synced) — register the launch test only where it can actually run.
+  # Everything the launch test needs, including the REQUIRED find_package
+  # calls, lives inside the guard: the same incomplete rolling dependency
+  # set that makes controller_manager unavailable can just as well drop
+  # these, and a REQUIRED lookup out here would turn the graceful skip into
+  # a hard build failure on the one distro the guard exists for.
+  find_package(controller_manager QUIET)
+  if(controller_manager_FOUND)
+    find_package(ament_cmake_ros REQUIRED)
+    find_package(launch_testing_ament_cmake REQUIRED)
+
+    function(add_ros_isolated_launch_test path)
+      set(RUNNER "${ament_cmake_ros_DIR}/run_test_isolated.py")
+      add_launch_test("${path}" RUNNER "${RUNNER}" ${ARGN})
+    endfunction()
+
+    # TIMEOUT budget. unittest runs all four sub-tests regardless of whether
+    # an earlier one failed, so the worst case is the SUM of their deadlines,
+    # not the largest of them:
+    #
+    #   test_a_node_running            15 s  (check_node_running timeout)
+    #   test_b_controllers_running  20-25 s  (two 10 s loops; the second makes
+    #                                         a 5 s list_controllers call that
+    #                                         can overrun its own deadline)
+    #   test_c_joint_states_published  20 s  (WaitForTopics, fixed in
+    #                                         controller_manager.test_utils)
+    #   test_d_trajectory_convergence  40 s  (10 s subscriber wait + 30 s poll)
+    #                                -------
+    #                                95-100 s, plus launch startup and SIGINT
+    #                                teardown -> ~100-105 s
+    #
+    # A passing run takes ~3 s, so this is not about the happy path: exceeding
+    # the budget makes ctest report a bare "Timeout" and throws away every
+    # assertion message the test exists to produce. 180 keeps a real margin on
+    # a cold, contended runner. Re-derive this sum before tightening it or
+    # adding a fifth sub-test.
+    add_ros_isolated_launch_test(test/launch/test_dummy_bringup.launch.py TIMEOUT 180)
+  else()
+    # Announced so the skip is greppable in the build log. Without this a
+    # dependency regression on a distro that is supposed to run the launch
+    # test would silently unregister it and leave CI green with the
+    # integration coverage gone. STATUS rather than WARNING on purpose:
+    # WARNING would give every rolling build a permanent '--- stderr' block,
+    # and a build that always warns is a build nobody reads.
+    message(STATUS
+      "controller_manager not found - skipping the dummy bringup launch test")
+  endif()
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
