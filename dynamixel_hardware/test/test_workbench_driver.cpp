@@ -194,4 +194,33 @@ TEST(TestWorkbenchDriver, disconnect_after_setup_attempt_leaves_calls_refused)
   EXPECT_EQ("not connected", driver.last_error());
 }
 
+// ---------------------------------------------------------------------------
+// M3 (feat/control-modes): pure-function tests for the new mode helpers.
+// ---------------------------------------------------------------------------
+
+TEST(WorkbenchDriverPureFunctionsM3, DutyToPwmTicksScalesAndClamps)
+{
+  EXPECT_EQ(885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(1.0));
+  EXPECT_EQ(-885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(-1.0));
+  EXPECT_EQ(0, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(0.0));
+  EXPECT_EQ(443, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(0.5));
+  EXPECT_EQ(885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(2.0));    // clamped
+  EXPECT_EQ(-885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(-2.0));  // clamped
+}
+
+TEST(WorkbenchDriverPureFunctionsM3, RequiredItemPerMode)
+{
+  using dynamixel_hardware::ControlMode;
+  using dynamixel_hardware::WorkbenchDriver;
+  EXPECT_STREQ("Goal_Current", WorkbenchDriver::required_item_for(ControlMode::Current));
+  EXPECT_STREQ(
+    "Goal_Current", WorkbenchDriver::required_item_for(ControlMode::CurrentBasedPosition));
+  EXPECT_STREQ("Goal_Torque", WorkbenchDriver::required_item_for(ControlMode::Torque));
+  EXPECT_STREQ("Goal_PWM", WorkbenchDriver::required_item_for(ControlMode::PWM));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::Position));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::Velocity));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::ExtendedPosition));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::MultiTurn));
+}
+
 }  // namespace

@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "dynamixel_hardware/dynamixel_driver.hpp"
@@ -32,6 +33,12 @@ namespace dynamixel_hardware
 /// Note: dynamixel_workbench_toolbox also defines a class named
 /// DynamixelDriver in the global namespace; inside this namespace the
 /// unqualified name always refers to dynamixel_hardware::DynamixelDriver.
+///
+/// set_control_mode() maps every ControlMode to its DynamixelWorkbench
+/// setter and keeps a per-id active-mode map (control_modes_); setup()
+/// records each id's model name (model_names_). A capability guard rejects
+/// modes the model's control table cannot support with a last_error naming
+/// the id and model.
 class WorkbenchDriver : public DynamixelDriver
 {
 public:
@@ -63,17 +70,38 @@ public:
     const ControlItem & position, const ControlItem & velocity, const ControlItem & current,
     uint16_t & start_address, uint16_t & read_length);
 
+  /// Pure helpers, unit-tested without serial I/O.
+  /// Goal_PWM is +-885 ticks for +-100 % duty (0.113 %/tick, X-series).
+  static int32_t duty_to_pwm_ticks(double duty_ratio);
+  /// Control-table item a model must have to enter the mode; nullptr when the
+  /// mode needs no capability check beyond the workbench setter itself.
+  static const char * required_item_for(ControlMode mode);
+
 private:
   void capture_log(const char * log);
   /// True when connect() has allocated the workbench; otherwise sets last_error_.
   bool ensure_workbench();
-  /// True when the workbench is connected and setup() has populated
-  /// control_items_; otherwise sets last_error_. Calls ensure_workbench()
-  /// first, so a never-connected driver still reports "not connected".
+  /// True when the workbench is connected and setup() has completed --
+  /// registered every sync handler it attempted, not merely populated
+  /// control_items_ (a handler-registration failure can happen after that);
+  /// otherwise sets last_error_. Calls ensure_workbench() first, so a
+  /// never-connected driver still reports "not connected".
   bool ensure_setup();
+  std::string model_name(uint8_t id) const;
 
   std::unique_ptr<DynamixelWorkbench> workbench_;
   std::map<const char * const, const ControlItem *> control_items_;
+  std::unordered_map<uint8_t, ControlMode> control_modes_;
+  std::unordered_map<uint8_t, std::string> model_names_;
+  // Actually assigned Goal_Current / Goal_PWM sync-write handler indices
+  // (nominally 2 and 3; -1 when the lead model's control table lacks the
+  // item -- see setup()).
+  int goal_current_index_{-1};
+  int goal_pwm_index_{-1};
+  // Set only after setup() registers every handler it attempted; cleared at
+  // the top of setup() and by disconnect(). Closes the gap where
+  // control_items_ is populated before handler registration can still fail.
+  bool setup_done_{false};
   std::string last_error_;
 };
 

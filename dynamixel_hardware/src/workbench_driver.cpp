@@ -15,6 +15,7 @@
 #include "dynamixel_hardware/workbench_driver.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -30,11 +31,15 @@ constexpr uint8_t kPresentPositionVelocityCurrentIndex = 0;
 constexpr const char * kGoalPositionItem = "Goal_Position";
 constexpr const char * kGoalVelocityItem = "Goal_Velocity";
 constexpr const char * kMovingSpeedItem = "Moving_Speed";
+constexpr const char * kGoalCurrentItem = "Goal_Current";
+constexpr const char * kGoalTorqueItem = "Goal_Torque";
+constexpr const char * kGoalPwmItem = "Goal_PWM";
 constexpr const char * kPresentPositionItem = "Present_Position";
 constexpr const char * kPresentVelocityItem = "Present_Velocity";
 constexpr const char * kPresentSpeedItem = "Present_Speed";
 constexpr const char * kPresentCurrentItem = "Present_Current";
 constexpr const char * kPresentLoadItem = "Present_Load";
+constexpr double kGoalPwmTicksPerDuty = 885.0;
 }  // namespace
 
 bool WorkbenchDriver::connect(const std::string & port_name, int baud_rate)
@@ -58,6 +63,11 @@ void WorkbenchDriver::disconnect()
   // drop them so a stale control_items_ can never be dereferenced after
   // reconnecting.
   control_items_.clear();
+  control_modes_.clear();
+  model_names_.clear();
+  goal_current_index_ = -1;
+  goal_pwm_index_ = -1;
+  setup_done_ = false;
 }
 
 bool WorkbenchDriver::ensure_workbench()
@@ -74,7 +84,12 @@ bool WorkbenchDriver::ensure_setup()
   if (!ensure_workbench()) {
     return false;
   }
-  if (control_items_.empty()) {
+  // setup() populates control_items_ before it registers the sync-write/
+  // sync-read handlers, so checking control_items_ alone would report "set
+  // up" even when a later handler-registration failure left some of those
+  // handler indices never registered. setup_done_ is only set true after
+  // the last handler registers successfully.
+  if (!setup_done_) {
     last_error_ = "not set up";
     return false;
   }
@@ -107,11 +122,22 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
   // previous connection's now-freed workbench, or handler indices that no
   // longer match) sitting around for a later call to trip over.
   control_items_.clear();
+  control_modes_.clear();
+  model_names_.clear();
+  goal_current_index_ = -1;
+  goal_pwm_index_ = -1;
+  setup_done_ = false;
   if (ids.empty()) {
     last_error_ = "no joint ids configured";
     return false;
   }
   const char * log = nullptr;
+
+  for (const auto id : ids) {
+    const char * name = workbench_->getModelName(id, &log);
+    model_names_[id] = name != nullptr ? name : "unknown";
+    control_modes_[id] = ControlMode::Position;
+  }
 
   // Control-table name fallbacks keep both Protocol 2.0 (X series etc.) and
   // older Protocol 1.0 servos working.
@@ -177,6 +203,31 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
     return false;
   }
 
+  // Handler indices are assigned in registration order starting at 0:
+  // Goal_Position 0, Goal_Velocity/Moving_Speed 1, then Goal_Current and
+  // Goal_PWM when the lead model's control table has them. The actually
+  // assigned indices are stored (never hardcoded 2/3 at a call site) since a
+  // bus whose lead model lacks Goal_Current shifts Goal_PWM down by one.
+  int next_index = kGoalVelocityIndex + 1;
+  const ControlItem * goal_current = workbench_->getItemInfo(ids[0], kGoalCurrentItem);
+  if (goal_current != nullptr) {
+    if (!workbench_->addSyncWriteHandler(goal_current->address, goal_current->data_length, &log)) {
+      capture_log(log);
+      return false;
+    }
+    control_items_[kGoalCurrentItem] = goal_current;
+    goal_current_index_ = next_index++;
+  }
+  const ControlItem * goal_pwm = workbench_->getItemInfo(ids[0], kGoalPwmItem);
+  if (goal_pwm != nullptr) {
+    if (!workbench_->addSyncWriteHandler(goal_pwm->address, goal_pwm->data_length, &log)) {
+      capture_log(log);
+      return false;
+    }
+    control_items_[kGoalPwmItem] = goal_pwm;
+    goal_pwm_index_ = next_index++;
+  }
+
   uint16_t start_address = 0;
   uint16_t read_length = 0;
   compute_read_window(
@@ -187,6 +238,7 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
     return false;
   }
 
+  setup_done_ = true;
   return true;
 }
 
@@ -221,24 +273,54 @@ bool WorkbenchDriver::set_control_mode(uint8_t id, ControlMode mode)
   if (!ensure_workbench()) {
     return false;
   }
+
+  // Capability guard: fail before ever touching the workbench setter when
+  // the model's control table lacks the item the mode needs (e.g. current
+  // control on AX-12, torque control outside MX-64/106).
+  const char * item = required_item_for(mode);
+  if (item != nullptr && workbench_->getItemInfo(id, item) == nullptr) {
+    last_error_ = "ID " + std::to_string(id) + " (model " + model_name(id) +
+      ") does not support the requested control mode: its control table has no '" +
+      std::string(item) + "'";
+    return false;
+  }
+
   const char * log = nullptr;
+  bool ok = false;
   switch (mode) {
     case ControlMode::Position:
-      if (!workbench_->setPositionControlMode(id, &log)) {
-        capture_log(log);
-        return false;
-      }
-      return true;
+      ok = workbench_->setPositionControlMode(id, &log);
+      break;
     case ControlMode::Velocity:
-      if (!workbench_->setVelocityControlMode(id, &log)) {
-        capture_log(log);
-        return false;
-      }
-      return true;
-    default:
-      last_error_ = "mode not implemented until control-mode rework";
-      return false;
+      ok = workbench_->setVelocityControlMode(id, &log);
+      break;
+    case ControlMode::Current:
+      ok = workbench_->setCurrentControlMode(id, &log);
+      break;
+    case ControlMode::Torque:
+      ok = workbench_->setTorqueControlMode(id, &log);
+      break;
+    case ControlMode::ExtendedPosition:
+      ok = workbench_->setExtendedPositionControlMode(id, &log);
+      break;
+    case ControlMode::MultiTurn:
+      ok = workbench_->setMultiTurnControlMode(id, &log);
+      break;
+    case ControlMode::CurrentBasedPosition:
+      ok = workbench_->setCurrentBasedPositionControlMode(id, &log);
+      break;
+    case ControlMode::PWM:
+      ok = workbench_->setPWMControlMode(id, &log);
+      break;
   }
+  if (!ok) {
+    capture_log(log);
+    last_error_ = "Failed to set control mode for ID " + std::to_string(id) + " (model " +
+      model_name(id) + "): " + last_error_;
+    return false;
+  }
+  control_modes_[id] = mode;
+  return true;
 }
 
 bool WorkbenchDriver::write_positions(
@@ -284,17 +366,88 @@ bool WorkbenchDriver::write_velocities(
 }
 
 bool WorkbenchDriver::write_efforts(
-  const std::vector<uint8_t> & /* ids */, const std::vector<double> & /* values */)
+  const std::vector<uint8_t> & ids, const std::vector<double> & values)
 {
-  last_error_ = "mode not implemented until control-mode rework";
-  return false;
+  if (!ensure_setup()) {
+    return false;
+  }
+  const char * log = nullptr;
+  std::vector<uint8_t> current_ids;
+  std::vector<int32_t> current_commands;
+
+  for (size_t i = 0; i < ids.size(); i++) {
+    const auto it = control_modes_.find(ids[i]);
+    const ControlMode mode = it != control_modes_.end() ? it->second : ControlMode::Position;
+    switch (mode) {
+      case ControlMode::Current:
+      case ControlMode::CurrentBasedPosition:
+        // Values arrive as motor-side mA (the plugin converts from Nm before
+        // calling); convert to ticks and batch into the Goal_Current sync write.
+        current_ids.push_back(ids[i]);
+        current_commands.push_back(
+          workbench_->convertCurrent2Value(ids[i], static_cast<float>(values[i])));
+        break;
+      case ControlMode::Torque:
+        // Protocol 1.0 MX has no sync-write handler for Goal_Torque; write per id.
+        if (!workbench_->itemWrite(
+            ids[i], kGoalTorqueItem,
+            workbench_->convertCurrent2Value(ids[i], static_cast<float>(values[i])), &log))
+        {
+          capture_log(log);
+          last_error_ = "Goal_Torque write failed for ID " + std::to_string(ids[i]) + ": " +
+            last_error_;
+          return false;
+        }
+        break;
+      default:
+        last_error_ = "ID " + std::to_string(ids[i]) +
+          " received an effort command but is not in a current/torque control mode";
+        return false;
+    }
+  }
+
+  if (!current_ids.empty()) {
+    if (goal_current_index_ < 0) {
+      last_error_ = "Goal_Current sync write handler is not available (model " +
+        model_name(current_ids[0]) + " has no Goal_Current)";
+      return false;
+    }
+    if (!workbench_->syncWrite(
+        static_cast<uint8_t>(goal_current_index_), current_ids.data(), current_ids.size(),
+        current_commands.data(), 1, &log))
+    {
+      capture_log(log);
+      return false;
+    }
+  }
+  return true;
 }
 
 bool WorkbenchDriver::write_pwms(
-  const std::vector<uint8_t> & /* ids */, const std::vector<double> & /* duty_ratios */)
+  const std::vector<uint8_t> & ids, const std::vector<double> & duty_ratios)
 {
-  last_error_ = "mode not implemented until control-mode rework";
-  return false;
+  if (!ensure_setup()) {
+    return false;
+  }
+  if (goal_pwm_index_ < 0) {
+    last_error_ = "Goal_PWM sync write handler is not available (model " +
+      model_name(ids.empty() ? 0 : ids[0]) + " has no Goal_PWM)";
+    return false;
+  }
+  const char * log = nullptr;
+  std::vector<uint8_t> mutable_ids = ids;  // syncWrite takes non-const pointers
+  std::vector<int32_t> commands(ids.size(), 0);
+  for (size_t i = 0; i < ids.size(); i++) {
+    commands[i] = duty_to_pwm_ticks(duty_ratios[i]);
+  }
+  if (!workbench_->syncWrite(
+      static_cast<uint8_t>(goal_pwm_index_), mutable_ids.data(), mutable_ids.size(),
+      commands.data(), 1, &log))
+  {
+    capture_log(log);
+    return false;
+  }
+  return true;
 }
 
 bool WorkbenchDriver::read_states(
@@ -376,6 +529,36 @@ std::string WorkbenchDriver::last_error() const
 void WorkbenchDriver::capture_log(const char * log)
 {
   last_error_ = (log != nullptr) ? log : "unknown DynamixelWorkbench error";
+}
+
+std::string WorkbenchDriver::model_name(uint8_t id) const
+{
+  const auto it = model_names_.find(id);
+  return it != model_names_.end() ? it->second : "unknown";
+}
+
+int32_t WorkbenchDriver::duty_to_pwm_ticks(double duty_ratio)
+{
+  return static_cast<int32_t>(
+    std::lround(std::clamp(duty_ratio, -1.0, 1.0) * kGoalPwmTicksPerDuty));
+}
+
+const char * WorkbenchDriver::required_item_for(ControlMode mode)
+{
+  switch (mode) {
+    case ControlMode::Current:
+    case ControlMode::CurrentBasedPosition:
+      return kGoalCurrentItem;
+    case ControlMode::Torque:
+      return kGoalTorqueItem;
+    case ControlMode::PWM:
+      return kGoalPwmItem;
+    default:
+      // Position/Velocity exist on every model; ExtendedPosition/MultiTurn
+      // support is decided by the workbench setter itself (its failure is
+      // wrapped with the model name in set_control_mode()).
+      return nullptr;
+  }
 }
 
 }  // namespace dynamixel_hardware
