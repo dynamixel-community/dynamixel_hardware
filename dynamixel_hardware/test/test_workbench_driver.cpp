@@ -16,6 +16,7 @@
 #include <pty.h>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -198,6 +199,42 @@ TEST(TestWorkbenchDriver, disconnect_after_setup_attempt_leaves_calls_refused)
   std::vector<double> efforts;
   EXPECT_FALSE(driver.read_states({1}, positions, velocities, efforts));
   EXPECT_EQ("not connected", driver.last_error());
+}
+
+// ---------------------------------------------------------------------------
+// Parked defect (Task 12): non-finite commands must be refused before any
+// tick conversion, on all four write_* paths, regardless of connection
+// state -- a non-finite command is always a caller bug worth reporting
+// precisely rather than one masked by the connection-guard diagnostics.
+// ---------------------------------------------------------------------------
+
+TEST(TestWorkbenchDriver, non_finite_commands_are_rejected_before_any_conversion)
+{
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  WorkbenchDriver driver;
+
+  EXPECT_FALSE(driver.write_positions({1}, {nan}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+  EXPECT_FALSE(driver.write_velocities({1}, {inf}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+  EXPECT_FALSE(driver.write_efforts({1}, {nan}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+  EXPECT_FALSE(driver.write_pwms({1}, {-inf}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+
+  // A finite command still reaches the pre-existing connection guard, so the
+  // new check cannot mask the "not connected" / "not set up" diagnostics.
+  EXPECT_FALSE(driver.write_positions({1}, {0.0}));
+  EXPECT_EQ("not connected", driver.last_error());
+}
+
+TEST(TestWorkbenchDriver, one_non_finite_element_rejects_the_whole_batch)
+{
+  WorkbenchDriver driver;
+  EXPECT_FALSE(
+    driver.write_positions({1, 2}, {0.0, std::numeric_limits<double>::quiet_NaN()}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
 }
 
 // ---------------------------------------------------------------------------

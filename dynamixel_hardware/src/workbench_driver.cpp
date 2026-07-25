@@ -97,6 +97,25 @@ bool WorkbenchDriver::ensure_setup()
   return true;
 }
 
+bool WorkbenchDriver::ensure_finite_commands(
+  const std::vector<uint8_t> & ids, const std::vector<double> & values, const char * label)
+{
+  if (values.size() != ids.size()) {
+    last_error_ = std::string(label) + " command count (" + std::to_string(values.size()) +
+      ") does not match id count (" + std::to_string(ids.size()) + ")";
+    return false;
+  }
+  for (size_t i = 0; i < values.size(); i++) {
+    if (!std::isfinite(values[i])) {
+      last_error_ = "ID " + std::to_string(ids[i]) + " received a non-finite " +
+        std::string(label) + " command at index " + std::to_string(i) + ": " +
+        std::to_string(values[i]);
+      return false;
+    }
+  }
+  return true;
+}
+
 bool WorkbenchDriver::ping(uint8_t id, uint16_t * model_number)
 {
   if (!ensure_workbench()) {
@@ -352,6 +371,9 @@ bool WorkbenchDriver::set_control_mode(uint8_t id, ControlMode mode)
 bool WorkbenchDriver::write_positions(
   const std::vector<uint8_t> & ids, const std::vector<double> & radians)
 {
+  if (!ensure_finite_commands(ids, radians, "position")) {
+    return false;
+  }
   if (!ensure_setup()) {
     return false;
   }
@@ -373,6 +395,9 @@ bool WorkbenchDriver::write_positions(
 bool WorkbenchDriver::write_velocities(
   const std::vector<uint8_t> & ids, const std::vector<double> & rad_per_sec)
 {
+  if (!ensure_finite_commands(ids, rad_per_sec, "velocity")) {
+    return false;
+  }
   if (!ensure_setup()) {
     return false;
   }
@@ -394,6 +419,9 @@ bool WorkbenchDriver::write_velocities(
 bool WorkbenchDriver::write_efforts(
   const std::vector<uint8_t> & ids, const std::vector<double> & values)
 {
+  if (!ensure_finite_commands(ids, values, "effort")) {
+    return false;
+  }
   if (!ensure_setup()) {
     return false;
   }
@@ -452,6 +480,9 @@ bool WorkbenchDriver::write_efforts(
 bool WorkbenchDriver::write_pwms(
   const std::vector<uint8_t> & ids, const std::vector<double> & duty_ratios)
 {
+  if (!ensure_finite_commands(ids, duty_ratios, "PWM duty ratio")) {
+    return false;
+  }
   if (!ensure_setup()) {
     return false;
   }
