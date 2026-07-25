@@ -31,27 +31,31 @@ The package builds one pluginlib plugin, `dynamixel_hardware/DynamixelHardware`:
 
 Each distro branch is built and tested by its own workflow, and a nightly matrix rebuilds all four plus the examples repository downstream. The older branches (`foxy`, `galactic`, `iron`) are frozen and unsupported.
 
+Kilted is not part of this line: it has no branch here and receives no backports. Kilted users stay on the released `ros-kilted-dynamixel-hardware` 0.6.0 binary, which predates everything documented below.
+
 ## Installation
 
-Binary packages for the previous release line are on the ROS buildfarm:
+Binary packages are published for jazzy, kilted, lyrical and rolling, and carry the older 0.5.x/0.6.x line:
 
 ```shell
 $ sudo apt install ros-$ROS_DISTRO-dynamixel-hardware
 ```
 
-Everything documented here is newer than that release, so build from source until 1.0.0 has been released and synced:
+There is no humble binary -- `dynamixel_hardware` has never been released into humble -- so humble users build from source, as does anyone who wants what this README documents:
 
 ```shell
-$ export ROS_DISTRO=rolling  # or lyrical, jazzy, humble
+$ export ROS_DISTRO=rolling  # humble, jazzy, lyrical or rolling
 $ source /opt/ros/$ROS_DISTRO/setup.bash
 $ mkdir -p ~/ws/src && cd ~/ws/src
-$ git clone -b $ROS_DISTRO https://github.com/dynamixel-community/dynamixel_hardware.git
+$ git clone https://github.com/dynamixel-community/dynamixel_hardware.git
 $ git clone https://github.com/dynamixel-community/dynamixel_hardware_examples.git
 $ cd ~/ws
 $ rosdep install --from-paths src --ignore-src -r -y
 $ colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 $ . install/setup.bash
 ```
+
+Clone the default `rolling` branch whichever distro you build against. It is the only branch that carries what this README describes, and the same codebase builds on humble, jazzy, lyrical and rolling -- that is what the `compat.hpp` shim is for. The distro branches receive this content by backport once 1.0.0 is released; until then `-b humble` and `-b jazzy` would give you the 0.6.x line instead, and `-b lyrical` would fail, because that branch is cut as part of the 1.0.0 release.
 
 The examples repository is optional; it is what the walkthrough further down uses.
 
@@ -259,25 +263,29 @@ To run the same demo without any hardware attached, uncomment `use_dummy` in the
 </hardware>
 ```
 
-Then follow the same instructions as for the real robot. The port and baud rate are not used in this mode, so whatever they say is irrelevant.
+Then follow the same instructions as for the real robot. No serial port is opened in this mode, so `port_name` can name a device that does not exist. `baud_rate` is still parsed and range-checked before the dummy takes over, so it has to be a valid value even here: `0` fails initialization under `use_dummy` exactly as it would on real hardware.
 
-The dummy has no interpolation: a position command is reflected into the position state immediately, so the robot jumps straight to each trajectory point rather than travelling to it. In plain `position` mode the target is clamped to ±π, matching a servo that cannot leave a single turn; the multi-turn modes are not clamped. A velocity command is integrated over the control period instead, and a `pwm` command is mirrored into the effort state.
+The dummy has no interpolation: a position command is reflected into the position state immediately, so the robot jumps straight to each trajectory point rather than travelling to it. Only plain `position` mode clamps the target, to ±π, matching a servo that cannot leave a single turn; `extended_position`, `multi_turn` and `current_based_position` are all unclamped. A velocity command is integrated over the control period instead, and a `pwm` command is mirrored into the effort state.
 
 ## Build and test
 
-The package builds and tests in the official ROS containers, which is exactly what CI does -- no ROS installation on the host is needed:
+The package builds and tests in the official ROS containers, which is exactly what CI does -- no ROS installation on the host is needed. Start the container from the host, with your workspace mounted:
 
 ```shell
-$ docker run -it --rm -v ~/ws:/ws -w /ws ros:rolling-ros-base bash  # or lyrical, jazzy, humble
-# export ROS_DISTRO=rolling
-# apt-get update && rosdep update
-# rosdep install --from-paths src --ignore-src -r -y
-# source /opt/ros/$ROS_DISTRO/setup.bash
-# colcon build --symlink-install
-# colcon test --packages-select dynamixel_hardware && colcon test-result --verbose
+docker run -it --rm -v ~/ws:/ws -w /ws ros:rolling-ros-base bash  # or lyrical, jazzy, humble
 ```
 
-`colcon test` runs the `ament_lint_common` linters and four gmock suites: the plugin itself (parameter parsing and validation, the lifecycle callbacks, all eight control modes, mode switching and the error-tolerance behavior), the dummy driver, the workbench driver, and a pluginlib load test. It also runs a `launch_testing` integration test that brings up `ros2_control_node` with a two-joint dummy robot, spawns `joint_state_broadcaster` and `joint_trajectory_controller`, and asserts that `/joint_states` is published and that a trajectory goal converges. That test needs `controller_manager` at build time and is skipped, with a note in the CMake output, where it is unavailable.
+Then, inside it (the image already exports `ROS_DISTRO`):
+
+```shell
+apt-get update && rosdep update
+rosdep install --from-paths src --ignore-src -r -y
+source /opt/ros/$ROS_DISTRO/setup.bash
+colcon build --symlink-install
+colcon test --packages-select dynamixel_hardware && colcon test-result --verbose
+```
+
+`colcon test` runs the `ament_lint_common` linters and four gmock suites: the plugin itself (parameter parsing and validation, the lifecycle callbacks, all eight control modes, mode switching and the error-tolerance behavior), the dummy driver, the workbench driver, and a pluginlib load test. It also runs a `launch_testing` integration test, `test/launch/test_dummy_bringup.launch.py`, which brings up `ros2_control_node` with a two-joint dummy robot, spawns `joint_state_broadcaster` and `joint_trajectory_controller`, and asserts that the controller manager and both controllers are running, that `/joint_states` is published, and that a trajectory goal converges. It runs under `run_test_isolated.py`, so it gets its own `ROS_DOMAIN_ID` and is safe on a busy machine. Registering it needs `controller_manager` at configure time; where that is missing the test is simply not registered, and the build logs `controller_manager not found - skipping the dummy bringup launch test`.
 
 ## Contributing
 
