@@ -2,6 +2,17 @@
 Changelog for package dynamixel_hardware
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Add Mergify backport automation and rewrite the README for 1.0.0
+* Add a launch_testing integration test for the dummy bringup (`#114 <https://github.com/dynamixel-community/dynamixel_hardware/issues/114>`_)
+* Finalize the hardware parameter set and the read/write error-handling policy: port_name (usb_port deprecated), torque_enable, read_error_tolerance, gear_ratio, offset, torque_constant, and Return_Delay_Time; hold the last known state on read errors and withhold writes until the first successful read (`#113 <https://github.com/dynamixel-community/dynamixel_hardware/issues/113>`_)
+* Support all eight Dynamixel operating modes with per-joint command-mode switching and full dummy-mode emulation (`#112 <https://github.com/dynamixel-community/dynamixel_hardware/issues/112>`_)
+* Refactor into a driver abstraction (DynamixelDriver / WorkbenchDriver / DummyDriver), normalize the lifecycle callbacks, and add the unit-test infrastructure (`#111 <https://github.com/dynamixel-community/dynamixel_hardware/issues/111>`_)
+* Modernize the build: namespaced CMake targets, automatic C++17/C++20 standard selection, and the visibility_control.h rename (`#110 <https://github.com/dynamixel-community/dynamixel_hardware/issues/110>`_)
+* Replace ros-tooling CI with official ROS container workflows for humble, jazzy, lyrical, and rolling, plus a nightly cross-branch and downstream-examples test matrix (`#109 <https://github.com/dynamixel-community/dynamixel_hardware/issues/109>`_)
+* Contributors: Betacrucis, IDavGal, Kenji Brameld, Maverobot, Tacha-S, Yutaka Kondo, moyashibeans, sebtiburzio, soham2560
+
 0.6.1 (2026-07-24)
 ------------------
 * Link namespaced CMake targets instead of ament_target_dependencies
