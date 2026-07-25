@@ -442,6 +442,34 @@ TEST_F(TestDynamixelHardware, on_error_disables_torque_and_disconnects_best_effo
   EXPECT_EQ(CallbackReturn::SUCCESS, hw_.on_error(rclcpp_lifecycle::State()));
 }
 
+// init_impl()'s `if (!driver_)` guard is a binding contract: an injected
+// driver (set_driver_for_testing() called before on_init) must survive
+// on_init, because M3/M4 test fixtures rely on init_impl only constructing a
+// driver when none is already set. Every other test in this file goes
+// through init_with_mock(), which calls on_init first and injects second --
+// that only exercises the "driver_ was null" branch. This test drives the
+// opposite order on purpose and asserts the *injected* mock (not a freshly
+// constructed WorkbenchDriver) is what on_configure() drives. Do not
+// "simplify" this to match init_with_mock()'s ordering: doing so would
+// silently stop covering the guard, and a later unconditional
+// `driver_ = std::make_unique<WorkbenchDriver>()` in init_impl would leave
+// all other tests green while M3/M4 fixtures start opening /dev/ttyUSB0.
+TEST_F(TestDynamixelHardware, injected_driver_survives_on_init)
+{
+  auto mock = std::make_unique<NiceMock<MockDriver>>();
+  auto * injected = mock.get();
+  ON_CALL(*injected, ping(_, _)).WillByDefault(Return(true));
+  ON_CALL(*injected, setup(_)).WillByDefault(Return(true));
+  ON_CALL(*injected, set_control_mode(_, _)).WillByDefault(Return(true));
+  ON_CALL(*injected, write_item(_, _, _)).WillByDefault(Return(true));
+  hw_.set_driver_for_testing(std::move(mock));
+
+  ASSERT_EQ(CallbackReturn::SUCCESS, call_on_init(hw_, parse_info(kValidSystem)));
+
+  EXPECT_CALL(*injected, connect("/dev/ttyUSB0", 1000000)).WillOnce(Return(true));
+  EXPECT_EQ(CallbackReturn::SUCCESS, hw_.on_configure(rclcpp_lifecycle::State()));
+}
+
 // --- legacy heuristic mode switching in write() ----------------------------
 
 TEST_F(TestDynamixelHardware, write_switches_all_joints_to_velocity_mode_on_velocity_command)
