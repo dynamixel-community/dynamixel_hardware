@@ -951,7 +951,7 @@ TEST_F(ControlModeM3Test, write_reports_an_error_until_a_failed_mode_switch_reco
   EXPECT_EQ(return_type::OK, write_once());
 }
 
-TEST_F(ControlModeM3Test, a_successful_mode_switch_clears_the_write_error)
+TEST_F(ControlModeM3Test, a_torque_free_mode_switch_does_not_clear_the_write_error)
 {
   init("", "");
   configure_and_activate();
@@ -960,9 +960,15 @@ TEST_F(ControlModeM3Test, a_successful_mode_switch_clears_the_write_error)
   ASSERT_EQ(return_type::ERROR, write_once());
   ::testing::Mock::VerifyAndClearExpectations(mock_);
 
+  // The joint is de-energized, so this switch rewrites the operating mode
+  // without cycling torque and returns OK having restored nothing. A
+  // successful return is therefore NOT enough to clear the fault: doing so
+  // would put the plugin straight back to commanding a limp servo and
+  // reporting healthy cycles. Only torque being on again clears it.
+  EXPECT_CALL(*mock_, set_torque(_, _)).Times(0);
   EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
   ASSERT_EQ(return_type::OK, prepare_perform({"joint1/pwm"}, {"joint1/velocity"}));
-  EXPECT_EQ(return_type::OK, write_once());
+  EXPECT_EQ(return_type::ERROR, write_once());
 }
 
 TEST_F(ControlModeM3Test, failed_torque_re_enable_still_counts_the_servos_as_energized)
@@ -977,11 +983,16 @@ TEST_F(ControlModeM3Test, failed_torque_re_enable_still_counts_the_servos_as_ene
   EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
   EXPECT_CALL(*mock_, set_torque(2, true)).WillOnce(Return(false));
   ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity", "joint2/velocity"}, {}));
+  // id 2 never came back on, so the failure keeps being reported.
+  ASSERT_EQ(return_type::ERROR, write_once());
   ::testing::Mock::VerifyAndClearExpectations(mock_);
 
   // id 1 is energized, so the next switch must still run the mandatory
   // torque-off leg: Dynamixel firmware refuses an Operating_Mode rewrite
   // while torque is on, so under-reporting here would silently lose the mode.
+  // What that switch does to the write() fault is deliberately not asserted:
+  // torque_enabled_ is a single hardware-wide flag that cannot represent id 2
+  // still being limp, and per-joint torque state is a separate milestone.
   EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
   EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
   EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));

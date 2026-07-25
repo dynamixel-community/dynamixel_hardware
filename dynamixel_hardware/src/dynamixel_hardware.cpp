@@ -527,10 +527,17 @@ return_type DynamixelHardware::perform_command_mode_switch(
     RCLCPP_ERROR(
       logger(),
       "Command mode switch failed; the affected joints are de-energized. write() will report an "
-      "error until the mode switch succeeds or the component is re-activated");
+      "error until torque is restored by a successful switch or by re-activating the component");
     return return_type::ERROR;
   }
-  switch_failed_ = false;
+  if (torque_enabled_) {
+    // Only an energized outcome clears the fault. apply_mode_switch() also
+    // returns OK when it touched no torque at all -- an empty switch, or one
+    // performed while the servos are already de-energized by a previous
+    // failure -- and clearing on those would report a limp joint as healthy
+    // again, which is exactly what the latch exists to prevent.
+    switch_failed_ = false;
+  }
   // The claim bookkeeping is only committed once the servos accepted the
   // switch, so a rejected switch does not leave the plugin acting on claims
   // it never applied.
