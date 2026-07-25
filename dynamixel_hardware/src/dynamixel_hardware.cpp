@@ -20,6 +20,7 @@
 #include <numeric>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -155,53 +156,27 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
     return CallbackReturn::ERROR;
   }
 
-  const auto baud_rate_it = params.find("baud_rate");
-  if (baud_rate_it != params.end()) {
-    try {
-      baud_rate_ = std::stoi(baud_rate_it->second);
-    } catch (const std::exception & e) {
-      RCLCPP_ERROR(
-        logger(), "Invalid 'baud_rate' hardware parameter '%s': %s",
-        baud_rate_it->second.c_str(), e.what());
-      return CallbackReturn::ERROR;
-    }
-  } else if (!use_dummy_) {
+  // baud_rate ends up as the uint32_t passed to DynamixelWorkbench::init();
+  // 0 or negative would be meaningless (a zero/wrapped bit rate), so >= 1.
+  const auto baud_status = parse_int_param(params, "baud_rate", baud_rate_, 1);
+  if (baud_status != CallbackReturn::SUCCESS) {
+    return baud_status;
+  }
+  if (params.find("baud_rate") == params.end() && !use_dummy_) {
     RCLCPP_ERROR(logger(), "The 'baud_rate' hardware parameter is not set");
     return CallbackReturn::ERROR;
   }
 
-  const auto tolerance_it = params.find("read_error_tolerance");
-  if (tolerance_it != params.end()) {
-    try {
-      read_error_tolerance_ = std::stoi(tolerance_it->second);
-    } catch (const std::exception & e) {
-      RCLCPP_ERROR(
-        logger(), "Invalid 'read_error_tolerance' hardware parameter '%s': %s",
-        tolerance_it->second.c_str(), e.what());
-      return CallbackReturn::ERROR;
-    }
-    if (read_error_tolerance_ < 1) {
-      RCLCPP_ERROR(
-        logger(), "read_error_tolerance must be >= 1, got %d", read_error_tolerance_);
-      return CallbackReturn::ERROR;
-    }
+  const auto read_tolerance_status =
+    parse_int_param(params, "read_error_tolerance", read_error_tolerance_, 1);
+  if (read_tolerance_status != CallbackReturn::SUCCESS) {
+    return read_tolerance_status;
   }
 
-  const auto write_tolerance_it = params.find("write_error_tolerance");
-  if (write_tolerance_it != params.end()) {
-    try {
-      write_error_tolerance_ = std::stoi(write_tolerance_it->second);
-    } catch (const std::exception & e) {
-      RCLCPP_ERROR(
-        logger(), "Invalid 'write_error_tolerance' hardware parameter '%s': %s",
-        write_tolerance_it->second.c_str(), e.what());
-      return CallbackReturn::ERROR;
-    }
-    if (write_error_tolerance_ < 1) {
-      RCLCPP_ERROR(
-        logger(), "write_error_tolerance must be >= 1, got %d", write_error_tolerance_);
-      return CallbackReturn::ERROR;
-    }
+  const auto write_tolerance_status =
+    parse_int_param(params, "write_error_tolerance", write_error_tolerance_, 1);
+  if (write_tolerance_status != CallbackReturn::SUCCESS) {
+    return write_tolerance_status;
   }
 
   // An injected driver (set_driver_for_testing before on_init) must survive:
@@ -216,6 +191,28 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
     }
   }
 
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn DynamixelHardware::parse_int_param(
+  const std::unordered_map<std::string, std::string> & params, const char * name, int & out,
+  int min_value)
+{
+  const auto it = params.find(name);
+  if (it == params.end()) {
+    return CallbackReturn::SUCCESS;  // absent: caller decides whether that's required
+  }
+  try {
+    out = std::stoi(it->second);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(
+      logger(), "Invalid '%s' hardware parameter '%s': %s", name, it->second.c_str(), e.what());
+    return CallbackReturn::ERROR;
+  }
+  if (out < min_value) {
+    RCLCPP_ERROR(logger(), "%s must be >= %d, got %d", name, min_value, out);
+    return CallbackReturn::ERROR;
+  }
   return CallbackReturn::SUCCESS;
 }
 

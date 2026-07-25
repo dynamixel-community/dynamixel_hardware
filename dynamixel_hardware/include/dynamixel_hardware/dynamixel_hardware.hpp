@@ -18,6 +18,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <hardware_interface/handle.hpp>
@@ -139,6 +140,13 @@ public:
 
 private:
   CallbackReturn init_impl(const hardware_interface::HardwareInfo & info);
+  /// Parses hardware_parameters[name] as an int into out, validating out >=
+  /// min_value. Absent key: returns SUCCESS without touching out (callers
+  /// decide whether the parameter is required). Non-numeric value or a
+  /// parsed value below min_value: logs and returns ERROR.
+  CallbackReturn parse_int_param(
+    const std::unordered_map<std::string, std::string> & params, const char * name, int & out,
+    int min_value);
 
   rclcpp::Logger logger() const;
 

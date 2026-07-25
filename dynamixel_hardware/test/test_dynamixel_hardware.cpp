@@ -1719,6 +1719,22 @@ TEST_F(ParamsRobustnessTest, WriteErrorToleranceParameterIsRespected)
   EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
 }
 
+// Boundary: write_error_tolerance = 1 (the minimum valid value) escalates on
+// the very first write failure -- there is no one-failure grace period.
+TEST_F(ParamsRobustnessTest, WriteErrorToleranceOfOneEscalatesOnFirstFailure)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"write_error_tolerance", "1"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();  // default reads succeed -> guard released
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ON_CALL(*mock_, write_positions(_, _)).WillByDefault(Return(false));
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+}
+
 // Non-numeric and out-of-range (< 1) values are rejected at init, not as an
 // uncaught exception or a silently-ignored parameter.
 TEST_F(ParamsRobustnessTest, InvalidWriteErrorToleranceFailsInit)
