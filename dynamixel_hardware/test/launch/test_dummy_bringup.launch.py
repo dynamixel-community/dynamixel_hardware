@@ -152,6 +152,18 @@ class TestDummyBringup(unittest.TestCase):
             self.assertGreater(
                 publisher.get_subscription_count(), 0,
                 'joint_trajectory_controller never subscribed to the trajectory topic')
+            # Known failure mode, only reachable on back-to-back local runs
+            # (e.g. `ctest --repeat`): run_test_isolated.py takes its domain
+            # from domain_coordinator, which releases the ID on exit and hands
+            # the same one straight back, so leftover discovery state from the
+            # previous run can satisfy get_subscription_count() from an
+            # already-dead endpoint. This single publish then goes nowhere and
+            # the poll below expires against a perfectly healthy bringup --
+            # controllers active, /joint_states flowing, joints simply at 0.0.
+            # CI runs this once per job and never recycles a domain, so it is
+            # not exposed. The known remedy, deliberately NOT applied, is to
+            # re-publish inside the poll; it costs a behavioural change, since
+            # the controller replaces its active trajectory on every message.
             publisher.publish(trajectory)
 
             deadline = time.monotonic() + 30.0
