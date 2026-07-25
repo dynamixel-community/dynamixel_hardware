@@ -50,6 +50,18 @@ constexpr char kPwmInterfaceName[] = "pwm";
 /// once, so neither can name one physical joint.
 constexpr int kMaxDynamixelId = 252;
 
+/// Which finite values parse_double_param() accepts, beyond "must parse and
+/// be finite" (always required). The three per-joint parameters routed
+/// through it each need a different rule: offset allows zero and negatives,
+/// gear_ratio allows negatives (direction inversion) but not zero (divide by
+/// zero), torque_constant allows neither.
+enum class DoubleParamRule
+{
+  kFinite,          ///< Any finite value, including zero and negatives (offset).
+  kFiniteNonZero,   ///< Finite and non-zero; negatives allowed (gear_ratio).
+  kFinitePositive,  ///< Finite and strictly positive (torque_constant).
+};
+
 struct JointValue
 {
   double position{0.0};
@@ -177,16 +189,17 @@ private:
     const std::unordered_map<std::string, std::string> & params, const char * name, int & out,
     int min_value, const char * joint_name = nullptr);
   /// Parses params[name] as a double into out, always requiring a finite
-  /// value; rejects zero unless allow_zero is true. Absent key: returns
-  /// SUCCESS without touching out (callers decide whether the parameter is
-  /// required). Non-numeric value, non-finite value, or a disallowed zero:
-  /// logs and returns ERROR. joint_name, when non-null, names the owning
-  /// joint in the error message -- pass it for per-joint parameters and
-  /// leave it null for hardware-level ones (e.g. baud_rate) so a typo'd
-  /// per-joint param can be traced on a multi-joint robot.
+  /// value, plus whatever rule further restricts it (see DoubleParamRule).
+  /// Absent key: returns SUCCESS without touching out (callers decide
+  /// whether the parameter is required). Non-numeric value, non-finite
+  /// value, or a value the rule rejects: logs and returns ERROR. joint_name,
+  /// when non-null, names the owning joint in the error message -- pass it
+  /// for per-joint parameters and leave it null for hardware-level ones
+  /// (e.g. baud_rate) so a typo'd per-joint param can be traced on a
+  /// multi-joint robot.
   CallbackReturn parse_double_param(
     const std::unordered_map<std::string, std::string> & params, const char * name, double & out,
-    bool allow_zero, const char * joint_name = nullptr);
+    DoubleParamRule rule, const char * joint_name = nullptr);
 
   rclcpp::Logger logger() const;
 

@@ -116,36 +116,32 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
     }
     joint.active_mode = joint.configured_mode;
 
-    const auto torque_constant_it = joint_params.find("torque_constant");
-    if (torque_constant_it != joint_params.end()) {
-      try {
-        joint.torque_constant = std::stod(torque_constant_it->second);
-      } catch (const std::exception & e) {
-        RCLCPP_ERROR(
-          logger(), "Joint '%s' has an invalid 'torque_constant' parameter '%s': %s",
-          joint_info.name.c_str(), torque_constant_it->second.c_str(), e.what());
-        return CallbackReturn::ERROR;
-      }
-      if (joint.torque_constant <= 0.0) {
-        RCLCPP_ERROR(
-          logger(), "Joint '%s' has a non-positive 'torque_constant' parameter '%s' (Nm/A > 0)",
-          joint_info.name.c_str(), torque_constant_it->second.c_str());
-        return CallbackReturn::ERROR;
-      }
+    // Strictly positive and finite: std::stod (via parse_double_param) parses
+    // "nan"/"inf"/"-inf" per strtod, and both silently corrupt the effort
+    // conversion downstream (effort_command_to_motor / effort_state_from_motor)
+    // if let through -- NaN degrades the joint to raw-mA effort with no
+    // warning, and inf zeroes every effort command and publishes +-inf/NaN on
+    // the effort state.
+    const auto torque_constant_status = parse_double_param(
+      joint_params, "torque_constant", joint.torque_constant, DoubleParamRule::kFinitePositive,
+      joint_info.name.c_str());
+    if (torque_constant_status != CallbackReturn::SUCCESS) {
+      return torque_constant_status;
     }
 
     // Zero would make the gear conversion divide by zero; negative ratios are
     // deliberately allowed -- they invert the rotation direction (#95/#94).
     const auto gear_ratio_status = parse_double_param(
-      joint_params, "gear_ratio", joint.gear_ratio, false, joint_info.name.c_str());
+      joint_params, "gear_ratio", joint.gear_ratio, DoubleParamRule::kFiniteNonZero,
+      joint_info.name.c_str());
     if (gear_ratio_status != CallbackReturn::SUCCESS) {
       return gear_ratio_status;
     }
 
     // Joint-side position offset (#96/#93); any finite value, including
     // zero (the default, a no-op) or negative, is valid.
-    const auto offset_status =
-      parse_double_param(joint_params, "offset", joint.offset, true, joint_info.name.c_str());
+    const auto offset_status = parse_double_param(
+      joint_params, "offset", joint.offset, DoubleParamRule::kFinite, joint_info.name.c_str());
     if (offset_status != CallbackReturn::SUCCESS) {
       return offset_status;
     }
@@ -277,7 +273,7 @@ CallbackReturn DynamixelHardware::parse_int_param(
 
 CallbackReturn DynamixelHardware::parse_double_param(
   const std::unordered_map<std::string, std::string> & params, const char * name, double & out,
-  bool allow_zero, const char * joint_name)
+  DoubleParamRule rule, const char * joint_name)
 {
   const auto it = params.find(name);
   if (it == params.end()) {
@@ -296,6 +292,9 @@ CallbackReturn DynamixelHardware::parse_double_param(
     }
     return CallbackReturn::ERROR;
   }
+  // std::stod parses "nan"/"inf"/"-inf" per strtod, so finiteness is not
+  // implied by a successful parse and has to be checked on its own,
+  // regardless of which rule below further restricts the value.
   if (!std::isfinite(out)) {
     if (joint_name) {
       RCLCPP_ERROR(
@@ -306,12 +305,24 @@ CallbackReturn DynamixelHardware::parse_double_param(
     }
     return CallbackReturn::ERROR;
   }
-  if (!allow_zero && out == 0.0) {
+  if (rule == DoubleParamRule::kFiniteNonZero && out == 0.0) {
     if (joint_name) {
       RCLCPP_ERROR(
         logger(), "Joint '%s' has an invalid '%s' parameter: must be non-zero", joint_name, name);
     } else {
       RCLCPP_ERROR(logger(), "%s must be non-zero", name);
+    }
+    return CallbackReturn::ERROR;
+  }
+  if (rule == DoubleParamRule::kFinitePositive && out <= 0.0) {
+    // Wording kept close to this check's original single-caller form
+    // (torque_constant, Nm/A): it already names the joint and the unit.
+    if (joint_name) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has a non-positive '%s' parameter '%s' (Nm/A > 0)", joint_name,
+        name, it->second.c_str());
+    } else {
+      RCLCPP_ERROR(logger(), "%s must be positive (Nm/A > 0), got '%s'", name, it->second.c_str());
     }
     return CallbackReturn::ERROR;
   }

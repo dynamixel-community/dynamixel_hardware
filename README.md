@@ -42,10 +42,10 @@ Per-joint parameters, inside each `<joint>` tag:
 | --- | --- | --- |
 | `id` | required | Dynamixel servo id, `0`-`252`. Two joints may not share one id; that is rejected at initialization, naming both joints and the id they collide on. |
 | `control_mode` | `position` | Operating mode applied at configuration time: one of `position`, `extended_position`, `multi_turn`, `current_based_position`, `velocity`, `current`, `torque`, `pwm`. See [Configure the operating mode per joint](#configure-the-operating-mode-per-joint). |
-| `torque_constant` | unset | Motor torque constant in Nm/A; must be positive. When set, the `effort` interfaces of that joint are in Nm instead of the servo's mA. |
+| `torque_constant` | unset | Motor torque constant in Nm/A; must be finite and positive (`nan`, `inf` and non-positive values are rejected at initialization). When set, the `effort` interfaces of that joint are in Nm instead of the servo's mA. |
 | `gear_ratio` | `1.0` | Motor revolutions per joint revolution. See [Gearing and offsets](#gearing-and-offsets). |
 | `offset` | `0.0` | Joint-side position offset in radians. See [Gearing and offsets](#gearing-and-offsets). |
-| `Profile_Velocity`, `Profile_Acceleration`, `Position_P_Gain`, `Position_I_Gain`, `Position_D_Gain`, `Velocity_P_Gain`, `Velocity_I_Gain`, `Return_Delay_Time` | unset | Integers written verbatim to that servo's control table on configure, and again after every mode change -- these are RAM registers and a mode change resets them. |
+| `Profile_Velocity`, `Profile_Acceleration`, `Position_P_Gain`, `Position_I_Gain`, `Position_D_Gain`, `Velocity_P_Gain`, `Velocity_I_Gain`, `Return_Delay_Time` | unset | Integers written verbatim to that servo's control table on configure, and again after every mode change -- most of these are RAM registers reset by a mode change; `Return_Delay_Time` is the exception, an EEPROM register like `Operating_Mode` (see below), so a mode change does not reset it but the plugin still rewrites it every time. |
 
 ### Gearing and offsets
 
@@ -64,7 +64,7 @@ Both directions of the bus absorb a burst of transient failures before reporting
 
 `write()` sends nothing at all until the first successful read after activation, and that first successful read also re-synchronizes the commands to the measured state. A flaky bus therefore cannot make the plugin sync-write a zero or NaN goal to servos it has just energized. Activation itself now succeeds even when its initial read fails -- it only logs a warning -- because that write guard is what keeps the bus safe until a real state arrives.
 
-A command that is not finite is refused by the serial driver before anything is converted or sent: if any element of a batch is NaN or infinite, the whole batch is dropped rather than partially written, and the error names the offending id and value. A non-finite command is always a bug in the caller. The refusal counts against `write_error_tolerance` like any other write failure.
+A command that is not finite is refused by the serial driver before it is converted to servo units or sent: if any element of a batch is NaN or infinite, the whole batch is dropped rather than partially written, and the error names the offending id and value. A non-finite command is always a bug in the caller. The refusal counts against `write_error_tolerance` like any other write failure.
 
 ### Read latency and Return_Delay_Time
 
@@ -116,7 +116,7 @@ Each joint accepts several optional parameters next to its `id` (see [Hardware p
 
 `control_mode` selects the Dynamixel operating mode the joint is put into at configuration time. It defaults to `position` and accepts `position`, `extended_position`, `multi_turn`, `current_based_position`, `velocity`, `current`, `torque` and `pwm`. An unknown value fails the lifecycle transition, and so does a mode the servo model cannot execute -- the failure names the joint id and the model, so an unsupported combination is reported before any controller starts instead of silently doing nothing.
 
-`torque_constant` is the motor torque constant in Nm/A and must be positive. When it is set, the `effort` command and state interfaces of that joint are in Nm and are converted to and from the servo's milliamps for you. When it is omitted, the `effort` interfaces carry the raw current in mA.
+`torque_constant` is the motor torque constant in Nm/A and must be finite and positive. When it is set, the `effort` command and state interfaces of that joint are in Nm and are converted to and from the servo's milliamps for you. When it is omitted, the `effort` interfaces carry the raw current in mA.
 
 The mode a joint actually runs in follows the command interfaces the active controller claims, so different joints can run in different modes in the same control cycle:
 

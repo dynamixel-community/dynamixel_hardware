@@ -1931,6 +1931,28 @@ TEST_F(ParamsRobustnessTest, InvalidOffsetFailsInit)
     init_with(default_hw_params(), {{"id", "1"}, {"offset", "inf"}}), CallbackReturn::ERROR);
 }
 
+// --- torque_constant (finiteness) ------------------------------------------
+
+// ControlModeM3Test::invalid_torque_constant_fails_on_init already covers
+// "abc" (non-numeric) and "-1.5"/"0" (non-positive). std::stod happily
+// parses "nan"/"inf"/"-inf" per strtod, and the old `<= 0.0` check let two of
+// those three slip through: NaN <= 0.0 is false (silently degrading the
+// joint to raw-mA effort), and inf > 0.0 is true (every effort command
+// becomes 0 mA on write, and the effort state publishes +-inf/NaN). All three
+// must now be rejected the same way gear_ratio and offset reject them.
+TEST_F(ParamsRobustnessTest, NonFiniteTorqueConstantFailsInit)
+{
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"torque_constant", "nan"}}),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"torque_constant", "inf"}}),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"torque_constant", "-inf"}}),
+    CallbackReturn::ERROR);
+}
+
 // PWM duty ratios are never gear/offset-converted (#95/#94, #96/#93): they are
 // not a physical position/velocity/effort quantity, so a joint claiming only
 // the pwm interface must see its commanded duty ratio reach the driver
