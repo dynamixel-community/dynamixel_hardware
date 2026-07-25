@@ -72,6 +72,7 @@ public:
 
   /// Pure helpers, unit-tested without serial I/O.
   /// Goal_PWM is +-885 ticks for +-100 % duty (0.113 %/tick, X-series).
+  /// duty_ratio must be finite -- write_pwms() guards this before calling.
   static int32_t duty_to_pwm_ticks(double duty_ratio);
   /// Control-table item a model must have to enter the mode; nullptr when the
   /// mode needs no capability check beyond the workbench setter itself.
@@ -87,6 +88,16 @@ private:
   /// otherwise sets last_error_. Calls ensure_workbench() first, so a
   /// never-connected driver still reports "not connected".
   bool ensure_setup();
+  /// True when values.size() == ids.size() and every element is still finite
+  /// after the narrowing to float that every conversion below performs (so
+  /// magnitudes above ~3.4e38 are refused alongside NaN and the infinities);
+  /// otherwise sets last_error_ naming the offending id, its index in the
+  /// batch, and label (e.g. "position"), and returns false. Called first in
+  /// every write_* method, before ensure_setup(), so a non-finite command --
+  /// always a caller bug -- is reported precisely regardless of connection
+  /// state, and the whole batch is refused rather than partially written.
+  bool ensure_finite_commands(
+    const std::vector<uint8_t> & ids, const std::vector<double> & values, const char * label);
   std::string model_name(uint8_t id) const;
 
   std::unique_ptr<DynamixelWorkbench> workbench_;
