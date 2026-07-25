@@ -657,8 +657,11 @@ return_type DynamixelHardware::perform_command_mode_switch(
     switch_failed_ = true;
     RCLCPP_ERROR(
       logger(),
-      "Command mode switch failed; the affected joints are de-energized. write() will report an "
-      "error until torque is restored by a successful switch or by re-activating the component");
+      "Command mode switch failed; the affected joints are de-energized. Re-activate the "
+      "component to energize them again -- a later mode switch will not, because restoring "
+      "torque is limited to joints that were energized when the switch began. write() reports "
+      "an error until then. (With torque_enable=false, de-energized is the intended state and "
+      "a successful switch clears the error.)");
     return return_type::ERROR;
   }
   if (all_torque_enabled() || !torque_enable_param_) {

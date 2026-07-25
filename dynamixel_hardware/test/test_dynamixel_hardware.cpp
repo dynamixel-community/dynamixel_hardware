@@ -994,7 +994,7 @@ TEST_F(ControlModeM3Test, a_torque_free_mode_switch_does_not_clear_the_write_err
   EXPECT_EQ(return_type::ERROR, write_once());
 }
 
-TEST_F(ControlModeM3Test, failed_torque_re_enable_still_counts_the_servos_as_energized)
+TEST_F(ControlModeM3Test, failed_torque_re_enable_still_tracks_the_servo_that_came_back_on)
 {
   init("", "");
   configure_and_activate();
@@ -1010,13 +1010,14 @@ TEST_F(ControlModeM3Test, failed_torque_re_enable_still_counts_the_servos_as_ene
   ASSERT_EQ(return_type::ERROR, write_once());
   ::testing::Mock::VerifyAndClearExpectations(mock_);
 
-  // id 1 is energized, so the next switch must still run the mandatory
-  // torque-off leg: Dynamixel firmware refuses an Operating_Mode rewrite
-  // while torque is on, so under-reporting here would silently lose the mode.
-  // What that switch does to the write() fault is deliberately not asserted:
-  // a rejected set_torque(true) leaves id 2's real state unknown, so its flag
-  // deliberately assumes the worst (energized) to keep the next switch
-  // cycling its torque instead of skipping the mandatory torque-off.
+  // id 1 came back on, so it is still tracked as energized and the next switch
+  // both runs its mandatory torque-off leg -- Dynamixel firmware refuses an
+  // Operating_Mode rewrite while torque is on -- and restores it afterwards.
+  // id 2 is a different matter: a rejected set_torque(true) is no confirmation
+  // that it came back up, so it now reads de-energized and this switch leaves
+  // it alone. The write() fault therefore stays latched, which is asserted in
+  // ParamsRobustnessTest.RejectedReEnableDoesNotLetALaterSwitchClearTheLatch
+  // rather than duplicated here.
   EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
   EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
   EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
@@ -2152,6 +2153,59 @@ TEST_F(ParamsRobustnessTest, RejectedReEnableIsRecoveredByReactivationNotByASwit
   // Re-activation energizes every joint and is the documented recovery.
   EXPECT_CALL(*mock_, set_torque(_, true)).Times(2).WillRepeatedly(Return(true));
   ASSERT_EQ(hw_.on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
+// Pins the all_torque_enabled() branch of the latch-clearing condition, which
+// is reachable even though a switch can no longer re-energize a joint: an
+// activation that fails on a joint which was ALREADY confirmed energized
+// leaves every joint reading energized while the latch is still set, because
+// set_torque_all() returns before touching that joint's flag and on_activate
+// never reaches its own switch_failed_ = false. A successful switch then
+// legitimately clears the fault. Without this test, deleting
+// "all_torque_enabled() ||" leaves the whole suite green.
+TEST_F(ParamsRobustnessTest, SwitchClearsLatchWhenEveryJointIsConfirmedEnergized)
+{
+  ASSERT_EQ(
+    init_with_joints(default_hw_params(), {{{"id", "1"}}, {{"id", "2"}}}),
+    CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}));
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  const std::vector<std::string> start = {"joint1/velocity"};
+  const std::vector<std::string> stop = {"joint1/position"};
+
+  // A switch of joint 1 alone is rejected at the mode write, so joint 1 is
+  // left de-energized and the fault latches. Joint 2 is outside the switch and
+  // stays confirmed energized.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(false));
+  EXPECT_CALL(*mock_, set_torque(2, _)).Times(0);
+  ASSERT_EQ(hw_.prepare_command_mode_switch(start, stop), return_type::OK);
+  ASSERT_EQ(hw_.perform_command_mode_switch(start, stop), return_type::ERROR);
+  ASSERT_EQ(hw_.write(t, p), return_type::ERROR);
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // Re-activation brings joint 1 back and is then rejected on joint 2. That
+  // rejection changes nothing about joint 2: it was already confirmed on and
+  // nothing tried to turn it off, so it still legitimately reads energized.
+  // Activation fails before it can clear the latch itself.
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, true)).WillOnce(Return(false));
+  ASSERT_EQ(hw_.on_activate(rclcpp_lifecycle::State()), CallbackReturn::ERROR);
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // Every joint is now confirmed energized while the latch is still set, so a
+  // successful switch clears it through all_torque_enabled() and write()
+  // resumes.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, _)).Times(0);
+  ASSERT_EQ(hw_.prepare_command_mode_switch(start, stop), return_type::OK);
+  EXPECT_EQ(hw_.perform_command_mode_switch(start, stop), return_type::OK);
   EXPECT_EQ(hw_.write(t, p), return_type::OK);
 }
 
