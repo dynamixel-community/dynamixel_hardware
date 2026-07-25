@@ -121,10 +121,18 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
 
     // Zero would make the gear conversion divide by zero; negative ratios are
     // deliberately allowed -- they invert the rotation direction (#95/#94).
-    const auto gear_ratio_status =
-      parse_double_param(joint_params, "gear_ratio", joint.gear_ratio, false);
+    const auto gear_ratio_status = parse_double_param(
+      joint_params, "gear_ratio", joint.gear_ratio, false, joint_info.name.c_str());
     if (gear_ratio_status != CallbackReturn::SUCCESS) {
       return gear_ratio_status;
+    }
+
+    // Joint-side position offset (#96/#93); any finite value, including
+    // zero (the default, a no-op) or negative, is valid.
+    const auto offset_status =
+      parse_double_param(joint_params, "offset", joint.offset, true, joint_info.name.c_str());
+    if (offset_status != CallbackReturn::SUCCESS) {
+      return offset_status;
     }
 
     joint.state.position = std::numeric_limits<double>::quiet_NaN();
@@ -205,7 +213,7 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
 
 CallbackReturn DynamixelHardware::parse_int_param(
   const std::unordered_map<std::string, std::string> & params, const char * name, int & out,
-  int min_value)
+  int min_value, const char * joint_name)
 {
   const auto it = params.find(name);
   if (it == params.end()) {
@@ -214,12 +222,24 @@ CallbackReturn DynamixelHardware::parse_int_param(
   try {
     out = std::stoi(it->second);
   } catch (const std::exception & e) {
-    RCLCPP_ERROR(
-      logger(), "Invalid '%s' hardware parameter '%s': %s", name, it->second.c_str(), e.what());
+    if (joint_name) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has an invalid '%s' parameter '%s': %s", joint_name, name,
+        it->second.c_str(), e.what());
+    } else {
+      RCLCPP_ERROR(
+        logger(), "Invalid '%s' hardware parameter '%s': %s", name, it->second.c_str(), e.what());
+    }
     return CallbackReturn::ERROR;
   }
   if (out < min_value) {
-    RCLCPP_ERROR(logger(), "%s must be >= %d, got %d", name, min_value, out);
+    if (joint_name) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has an invalid '%s' parameter: must be >= %d, got %d", joint_name,
+        name, min_value, out);
+    } else {
+      RCLCPP_ERROR(logger(), "%s must be >= %d, got %d", name, min_value, out);
+    }
     return CallbackReturn::ERROR;
   }
   return CallbackReturn::SUCCESS;
@@ -227,7 +247,7 @@ CallbackReturn DynamixelHardware::parse_int_param(
 
 CallbackReturn DynamixelHardware::parse_double_param(
   const std::unordered_map<std::string, std::string> & params, const char * name, double & out,
-  bool allow_zero)
+  bool allow_zero, const char * joint_name)
 {
   const auto it = params.find(name);
   if (it == params.end()) {
@@ -236,16 +256,33 @@ CallbackReturn DynamixelHardware::parse_double_param(
   try {
     out = std::stod(it->second);
   } catch (const std::exception & e) {
-    RCLCPP_ERROR(
-      logger(), "Invalid '%s' parameter '%s': %s", name, it->second.c_str(), e.what());
+    if (joint_name) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has an invalid '%s' parameter '%s': %s", joint_name, name,
+        it->second.c_str(), e.what());
+    } else {
+      RCLCPP_ERROR(
+        logger(), "Invalid '%s' parameter '%s': %s", name, it->second.c_str(), e.what());
+    }
     return CallbackReturn::ERROR;
   }
   if (!std::isfinite(out)) {
-    RCLCPP_ERROR(logger(), "%s must be finite, got '%s'", name, it->second.c_str());
+    if (joint_name) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has an invalid '%s' parameter: must be finite, got '%s'",
+        joint_name, name, it->second.c_str());
+    } else {
+      RCLCPP_ERROR(logger(), "%s must be finite, got '%s'", name, it->second.c_str());
+    }
     return CallbackReturn::ERROR;
   }
   if (!allow_zero && out == 0.0) {
-    RCLCPP_ERROR(logger(), "%s must be non-zero", name);
+    if (joint_name) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has an invalid '%s' parameter: must be non-zero", joint_name, name);
+    } else {
+      RCLCPP_ERROR(logger(), "%s must be non-zero", name);
+    }
     return CallbackReturn::ERROR;
   }
   return CallbackReturn::SUCCESS;

@@ -72,8 +72,8 @@ struct Joint
   /// rejected at init.
   double gear_ratio{1.0};
   /// Joint-side position offset: subtracted after the gear conversion on
-  /// read, added back before it on write. Parsed starting Task 7; stays at
-  /// this default (a no-op) until then.
+  /// read, added back before it on write. Parsed from the 'offset' per-joint
+  /// parameter (#93); 0.0 (the default) is a no-op.
   double offset{0.0};
   std::set<std::string> claimed_interfaces{};
 };
@@ -152,18 +152,25 @@ private:
   /// Parses hardware_parameters[name] as an int into out, validating out >=
   /// min_value. Absent key: returns SUCCESS without touching out (callers
   /// decide whether the parameter is required). Non-numeric value or a
-  /// parsed value below min_value: logs and returns ERROR.
+  /// parsed value below min_value: logs and returns ERROR. joint_name, when
+  /// non-null, names the owning joint in the error message -- pass it for
+  /// per-joint parameters and leave it null for hardware-level ones (e.g.
+  /// baud_rate) so a typo'd per-joint param can be traced on a multi-joint
+  /// robot.
   CallbackReturn parse_int_param(
     const std::unordered_map<std::string, std::string> & params, const char * name, int & out,
-    int min_value);
+    int min_value, const char * joint_name = nullptr);
   /// Parses params[name] as a double into out, always requiring a finite
   /// value; rejects zero unless allow_zero is true. Absent key: returns
   /// SUCCESS without touching out (callers decide whether the parameter is
   /// required). Non-numeric value, non-finite value, or a disallowed zero:
-  /// logs and returns ERROR.
+  /// logs and returns ERROR. joint_name, when non-null, names the owning
+  /// joint in the error message -- pass it for per-joint parameters and
+  /// leave it null for hardware-level ones (e.g. baud_rate) so a typo'd
+  /// per-joint param can be traced on a multi-joint robot.
   CallbackReturn parse_double_param(
     const std::unordered_map<std::string, std::string> & params, const char * name, double & out,
-    bool allow_zero);
+    bool allow_zero, const char * joint_name = nullptr);
 
   rclcpp::Logger logger() const;
 

@@ -1801,6 +1801,62 @@ TEST_F(ParamsRobustnessTest, InvalidGearRatioFailsInit)
     CallbackReturn::ERROR);
 }
 
+// --- offset (#96/#93) ----------------------------------------------------
+
+// offset (joint-side radians) shifts the reported position only:
+// joint_reported = raw_joint_position - offset, and position commands add it
+// back before being sent. Velocity and effort must pass through unscaled.
+TEST_F(ParamsRobustnessTest, OffsetShiftsPositionStateAndCommand)
+{
+  ASSERT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"offset", "0.5"}}), CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({1.5}, {0.3}, {0.2}));
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ASSERT_EQ(hw_.read(t, p), return_type::OK);
+  // joint_reported = raw - offset; velocity and effort are unaffected.
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_POSITION), 1.0, 1e-9);
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_VELOCITY), 0.3, 1e-9);
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_EFFORT), 0.2, 1e-9);
+  // Round trip: command 1.0 (reset to state) -> raw 1.5 at the driver.
+  EXPECT_CALL(*mock_, write_positions(_, ElementsAre(DoubleNear(1.5, 1e-9))))
+  .WillOnce(Return(true));
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
+// Pipeline order is fixed: joint = motor / gear_ratio - offset. A swapped
+// order (subtracting offset before dividing by gear_ratio, or vice versa on
+// write) would still pass GearRatioScalesStatesAndCommands and
+// OffsetShiftsPositionStateAndCommand individually but fail this combination.
+TEST_F(ParamsRobustnessTest, GearRatioAndOffsetCompose)
+{
+  ASSERT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"gear_ratio", "2.0"}, {"offset", "0.5"}}),
+    CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({3.0}, {0.0}, {0.0}));
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ASSERT_EQ(hw_.read(t, p), return_type::OK);
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_POSITION), 1.0, 1e-9);  // 3.0/2.0 - 0.5
+  EXPECT_CALL(*mock_, write_positions(_, ElementsAre(DoubleNear(3.0, 1e-9))))
+  .WillOnce(Return(true));  // (1.0 + 0.5) * 2.0
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
+TEST_F(ParamsRobustnessTest, InvalidOffsetFailsInit)
+{
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"offset", "abc"}}), CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"offset", "nan"}}), CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"offset", "inf"}}), CallbackReturn::ERROR);
+}
+
 }  // namespace m4_test
 
 }  // namespace
