@@ -14,6 +14,7 @@
 
 #include "dynamixel_hardware/dynamixel_hardware.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -497,8 +498,6 @@ return_type DynamixelHardware::perform_command_mode_switch(
   std::vector<size_t> indices;
   std::vector<ControlMode> modes;
   for (size_t i = 0; i < joints_.size(); i++) {
-    joints_[i].claimed_interfaces = pending_claims_[i];
-    joints_[i].legacy = pending_legacy_[i];
     if (pending_legacy_[i]) {
       if (joints_[i].active_mode != legacy_mode_) {
         indices.push_back(i);
@@ -509,7 +508,17 @@ return_type DynamixelHardware::perform_command_mode_switch(
       modes.push_back(pending_modes_[i]);
     }
   }
-  return apply_mode_switch(indices, modes);
+  if (apply_mode_switch(indices, modes) != return_type::OK) {
+    return return_type::ERROR;
+  }
+  // The claim bookkeeping is only committed once the servos accepted the
+  // switch, so a rejected switch does not leave the plugin acting on claims
+  // it never applied.
+  for (size_t i = 0; i < joints_.size(); i++) {
+    joints_[i].claimed_interfaces = pending_claims_[i];
+    joints_[i].legacy = pending_legacy_[i];
+  }
+  return return_type::OK;
 }
 
 return_type DynamixelHardware::read(
@@ -672,6 +681,12 @@ return_type DynamixelHardware::apply_mode_switch(
   // Dynamixel requirement: the operating mode can only change with torque off.
   const bool was_torque_enabled = torque_enabled_;
   if (was_torque_enabled) {
+    // From here on the servos are de-energized, and every early return below
+    // leaves them that way. torque_enabled_ must not keep claiming otherwise:
+    // a stale `true` would make write() sync-write goals to limp servos while
+    // reporting a healthy cycle, and would make the next mode switch believe
+    // it still has to cycle torque.
+    torque_enabled_ = false;
     for (const auto index : indices) {
       if (!driver_->set_torque(joints_[index].id, false)) {
         RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
@@ -701,6 +716,7 @@ return_type DynamixelHardware::apply_mode_switch(
         return return_type::ERROR;
       }
     }
+    torque_enabled_ = true;
   }
   for (const auto index : indices) {
     reset_joint_command(index);
@@ -737,7 +753,13 @@ return_type DynamixelHardware::update_legacy_heuristic()
   } else if (position_changed) {
     target = ControlMode::Position;
   }
-  if (target == legacy_mode_ && joints_[legacy_indices.front()].active_mode == target) {
+  // Every legacy joint must be checked, not just the first one: a partially
+  // failed switch can leave the group's active modes diverged, and the
+  // trailing joints still need to be re-synced.
+  const bool all_in_target = std::all_of(
+    legacy_indices.cbegin(), legacy_indices.cend(),
+    [this, target](size_t i) {return joints_[i].active_mode == target;});
+  if (target == legacy_mode_ && all_in_target) {
     return return_type::OK;
   }
   const std::vector<ControlMode> modes(legacy_indices.size(), target);

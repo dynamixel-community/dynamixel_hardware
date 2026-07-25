@@ -889,6 +889,43 @@ TEST_F(ControlModeM3Test, perform_fails_when_driver_rejects_requested_mode)
   EXPECT_EQ(return_type::ERROR, hw_->perform_command_mode_switch({"joint1/effort"}, {}));
 }
 
+TEST_F(ControlModeM3Test, failed_mode_switch_stops_believing_torque_is_enabled)
+{
+  init("", "");
+  configure_and_activate();
+  // Both joints must move to Velocity, and the second servo rejects the mode:
+  // the torque-off leg already ran, so both servos are left de-energized.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(2, ControlMode::Velocity)).WillOnce(Return(false));
+  ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity", "joint2/velocity"}, {}));
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // The servos are off, so the next mode switch must not cycle torque around
+  // the rewrite: re-enabling it would energize a component nobody
+  // re-activated, and needing the cycle at all would mean the plugin still
+  // believed the stale "torque enabled" state.
+  EXPECT_CALL(*mock_, set_torque(_, _)).Times(0);
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
+  EXPECT_EQ(return_type::OK, prepare_perform({"joint1/pwm"}, {"joint1/velocity"}));
+}
+
+TEST_F(ControlModeM3Test, failed_mode_switch_does_not_commit_the_claims)
+{
+  init("", "");
+  configure_and_activate();
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(2, ControlMode::Velocity)).WillOnce(Return(false));
+  ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity", "joint2/velocity"}, {}));
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+  // joint1 never took the velocity claim, so a later effort-only claim is the
+  // supported single-interface combination instead of the rejected
+  // velocity+effort pair.
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Current)).WillOnce(Return(true));
+  EXPECT_EQ(return_type::OK, prepare_perform({"joint1/effort"}, {}));
+}
+
 TEST_F(ControlModeM3Test, torque_constant_converts_effort_command_to_milliamps)
 {
   init(
