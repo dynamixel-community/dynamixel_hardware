@@ -67,11 +67,30 @@ if(BUILD_TESTING)
   target_include_directories(test_dummy_driver PRIVATE include)
   target_link_libraries(test_dummy_driver ${PROJECT_NAME})
 
+  ament_add_gmock(test_load_dynamixel_hardware test/test_load_dynamixel_hardware.cpp)
+  target_include_directories(test_load_dynamixel_hardware PRIVATE include)
+  target_link_libraries(test_load_dynamixel_hardware
+    ${PROJECT_NAME}
+    hardware_interface::hardware_interface
+    rclcpp::rclcpp
+    ros2_control_test_assets::ros2_control_test_assets
+  )
+
   ament_add_gmock(test_workbench_driver test/test_workbench_driver.cpp)
   target_include_directories(test_workbench_driver PRIVATE include)
   target_link_libraries(test_workbench_driver
     ${PROJECT_NAME}
     dynamixel_workbench_toolbox::dynamixel_workbench_toolbox
+  )
+
+  ament_add_gmock(test_dynamixel_hardware test/test_dynamixel_hardware.cpp)
+  target_include_directories(test_dynamixel_hardware PRIVATE include test)
+  target_link_libraries(test_dynamixel_hardware
+    ${PROJECT_NAME}
+    hardware_interface::hardware_interface
+    rclcpp::rclcpp
+    rclcpp_lifecycle::rclcpp_lifecycle
+    ros2_control_test_assets::ros2_control_test_assets
   )
 endif()
 
