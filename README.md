@@ -74,11 +74,12 @@ The mode a joint actually runs in follows the command interfaces the active cont
 | `pwm` | `pwm` |
 | `position` + `effort` | `current_based_position` (the effort command is the current limit) |
 | `position` + `velocity` | kept on the historical behavior: a changed velocity command switches the joint to velocity control, otherwise a changed position command switches it back to position control |
-| anything else | rejected, so the controller switch fails instead of the joint moving unexpectedly |
+| an interface name this plugin does not know | logs a warning once and falls back to the same historical position/velocity behavior, so the controller still starts |
+| any other combination of the four known interfaces | rejected, so the controller switch fails instead of the joint moving unexpectedly |
 
-Switching a mode requires torque to be disabled on the Dynamixel, so the plugin disables torque, rewrites the operating mode and the extra control-table parameters, and re-enables torque for exactly the joints that change. Commands are reset to the measured position at that moment, which means the first cycle after a switch sends the reset command rather than the controller's.
+Switching a mode requires torque to be disabled on the Dynamixel, so the plugin disables torque, rewrites the operating mode and the extra control-table parameters, and re-enables torque for exactly the joints that change. Commands are reset to the measured position at that moment, which means the first cycle after a switch sends the reset command rather than the controller's. If a switch fails halfway -- a serial timeout, or a servo model that cannot execute the requested mode -- the affected joints are left de-energized, so the plugin reports an error from every following `write()` until the switch succeeds or the component is activated again. `controller_manager` only logs a failed switch and starts the controller anyway, and that error is what stops a limp arm from being reported as healthy.
 
-In addition to `position`, `velocity` and `effort`, every joint exports a custom `pwm` command interface for direct duty-ratio control in `[-1, 1]`. Declare it in the URDF (`<command_interface name="pwm"/>`) to use it.
+In addition to `position`, `velocity` and `effort`, every joint exports a custom `pwm` command interface for direct duty-ratio control in `[-1, 1]`. Declare it in the URDF (`<command_interface name="pwm"/>`) to use it. Under `use_dummy` the emulated servo mirrors the commanded duty ratio into its effort state, so a joint that combines `pwm` with `torque_constant` publishes that duty ratio scaled as if it were a current and the resulting Nm value is meaningless; real hardware is unaffected.
 
 - Terminal 1
 
