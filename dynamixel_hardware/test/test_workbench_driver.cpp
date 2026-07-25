@@ -121,6 +121,8 @@ TEST(TestWorkbenchDriver, calls_before_connect_fail_with_not_connected)
   EXPECT_FALSE(driver.set_control_mode(1, dynamixel_hardware::ControlMode::Position));
   EXPECT_FALSE(driver.write_positions({1}, {0.0}));
   EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_FALSE(driver.write_efforts({1}, {0.0}));
+  EXPECT_FALSE(driver.write_pwms({1}, {0.0}));
   EXPECT_FALSE(driver.write_item(1, "Profile_Velocity", 100));
   std::vector<double> positions;
   std::vector<double> velocities;
@@ -153,6 +155,10 @@ TEST(TestWorkbenchDriver, calls_after_connect_before_setup_fail_with_not_set_up)
   EXPECT_FALSE(driver.write_positions({1}, {0.0}));
   EXPECT_EQ("not set up", driver.last_error());
   EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+  EXPECT_FALSE(driver.write_efforts({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+  EXPECT_FALSE(driver.write_pwms({1}, {0.0}));
   EXPECT_EQ("not set up", driver.last_error());
   std::vector<double> positions;
   std::vector<double> velocities;
@@ -192,6 +198,35 @@ TEST(TestWorkbenchDriver, disconnect_after_setup_attempt_leaves_calls_refused)
   std::vector<double> efforts;
   EXPECT_FALSE(driver.read_states({1}, positions, velocities, efforts));
   EXPECT_EQ("not connected", driver.last_error());
+}
+
+// ---------------------------------------------------------------------------
+// M3 (feat/control-modes): pure-function tests for the new mode helpers.
+// ---------------------------------------------------------------------------
+
+TEST(WorkbenchDriverPureFunctionsM3, DutyToPwmTicksScalesAndClamps)
+{
+  EXPECT_EQ(885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(1.0));
+  EXPECT_EQ(-885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(-1.0));
+  EXPECT_EQ(0, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(0.0));
+  EXPECT_EQ(443, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(0.5));
+  EXPECT_EQ(885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(2.0));    // clamped
+  EXPECT_EQ(-885, dynamixel_hardware::WorkbenchDriver::duty_to_pwm_ticks(-2.0));  // clamped
+}
+
+TEST(WorkbenchDriverPureFunctionsM3, RequiredItemPerMode)
+{
+  using dynamixel_hardware::ControlMode;
+  using dynamixel_hardware::WorkbenchDriver;
+  EXPECT_STREQ("Goal_Current", WorkbenchDriver::required_item_for(ControlMode::Current));
+  EXPECT_STREQ(
+    "Goal_Current", WorkbenchDriver::required_item_for(ControlMode::CurrentBasedPosition));
+  EXPECT_STREQ("Goal_Torque", WorkbenchDriver::required_item_for(ControlMode::Torque));
+  EXPECT_STREQ("Goal_PWM", WorkbenchDriver::required_item_for(ControlMode::PWM));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::Position));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::Velocity));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::ExtendedPosition));
+  EXPECT_EQ(nullptr, WorkbenchDriver::required_item_for(ControlMode::MultiTurn));
 }
 
 }  // namespace

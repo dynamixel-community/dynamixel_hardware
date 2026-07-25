@@ -43,6 +43,44 @@ The `port_name` parameter used to be named `usb_port`. `usb_port` still works, b
 
 Deactivating the hardware component (or shutting down the `controller_manager`) now disables torque, so the joints go limp -- previously `on_deactivate` was a no-op and the servos stayed energized. Keep this in mind before deactivating a robot that isn't resting in a safe pose.
 
+### Configure the operating mode per joint
+
+Each joint accepts two optional parameters next to its `id`:
+
+```xml
+<joint name="joint1">
+  <param name="id">11</param>
+  <param name="control_mode">current_based_position</param>
+  <param name="torque_constant">1.79</param>
+  <command_interface name="position"/>
+  <command_interface name="effort"/>
+  <state_interface name="position"/>
+  <state_interface name="velocity"/>
+  <state_interface name="effort"/>
+</joint>
+```
+
+`control_mode` selects the Dynamixel operating mode the joint is put into at configuration time. It defaults to `position` and accepts `position`, `extended_position`, `multi_turn`, `current_based_position`, `velocity`, `current`, `torque` and `pwm`. An unknown value fails the lifecycle transition, and so does a mode the servo model cannot execute -- the failure names the joint id and the model, so an unsupported combination is reported before any controller starts instead of silently doing nothing.
+
+`torque_constant` is the motor torque constant in Nm/A and must be positive. When it is set, the `effort` command and state interfaces of that joint are in Nm and are converted to and from the servo's milliamps for you. When it is omitted, the `effort` interfaces carry the raw current in mA.
+
+The mode a joint actually runs in follows the command interfaces the active controller claims, so different joints can run in different modes in the same control cycle:
+
+| Claimed command interfaces | Operating mode |
+| --- | --- |
+| `position` | the configured mode when it is one of the position-family modes, otherwise `position` |
+| `velocity` | `velocity` |
+| `effort` | `current`, or `torque` when the joint is configured as `torque` |
+| `pwm` | `pwm` |
+| `position` + `effort` | `current_based_position` (the effort command is the current limit) |
+| `position` + `velocity` | kept on the historical behavior: a changed velocity command switches the joint to velocity control, otherwise a changed position command switches it back to position control |
+| an interface name this plugin does not know | logs a warning once and falls back to the same historical position/velocity behavior, so the controller still starts |
+| any other combination of the four known interfaces | rejected, so the controller switch fails instead of the joint moving unexpectedly |
+
+Switching a mode requires torque to be disabled on the Dynamixel, so the plugin disables torque, rewrites the operating mode and the extra control-table parameters, and re-enables torque for exactly the joints that change. Commands are reset to the measured position at that moment, which means the first cycle after a switch sends the reset command rather than the controller's. If a switch fails halfway -- a serial timeout, or a servo model that cannot execute the requested mode -- the affected joints are left de-energized, so the plugin reports an error from every following `write()` until torque is actually restored, either by a later switch that re-enables it or by activating the component again. A switch that merely returns successfully without re-energizing anything does not clear the fault. `controller_manager` only logs a failed switch and starts the controller anyway, and that error is what stops a limp arm from being reported as healthy.
+
+In addition to `position`, `velocity` and `effort`, every joint exports a custom `pwm` command interface for direct duty-ratio control in `[-1, 1]`. Declare it in the URDF (`<command_interface name="pwm"/>`) to use it. Under `use_dummy` the emulated servo mirrors the commanded duty ratio into its effort state, so a joint that combines `pwm` with `torque_constant` publishes that duty ratio scaled as if it were a current and the resulting Nm value is meaningless; real hardware is unaffected.
+
 - Terminal 1
 
 Launch the `ros2_control` manager for the OpenManipulator-X.

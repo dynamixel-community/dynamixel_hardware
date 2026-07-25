@@ -24,24 +24,25 @@
 namespace dynamixel_hardware
 {
 
-/// In-memory driver backing the use_dummy hardware parameter.
-/// Production code (not a test double): it lets the full plugin logic run
-/// without hardware, for demos and integration tests.
+/// In-memory driver backing the `use_dummy` hardware parameter.
+///
+/// Emulates every ControlMode so that mode switching, launch tests and demos
+/// behave equivalently with and without hardware (design spec section 5.5):
+///   Position                -> state.position <- cmd (clamped to [-pi, pi]),
+///                              state.velocity <- (cmd - previous) / period
+///   ExtendedPosition,
+///   MultiTurn               -> same as Position but without the clamp
+///   Velocity                -> position += cmd * period (integrated in tick()),
+///                              velocity <- cmd (regression #71)
+///   Current, Torque         -> state.effort <- cmd, kinematic state held
+///   CurrentBasedPosition    -> position tracked (no clamp), state.effort <- cap
+///   PWM                     -> duty accepted, state.effort mirrors the duty
+///
+/// Writes that do not match an id's active mode return false with last_error
+/// set, so plugin dispatch bugs fail loudly in tests.
 class DummyDriver : public DynamixelDriver
 {
 public:
-  /// Per-servo emulated state. Only the DynamixelDriver virtual surface is
-  /// contract-fixed; the control-mode rework (M3) may replace these
-  /// emulation internals wholesale.
-  struct ServoState
-  {
-    double position{0.0};
-    double velocity{0.0};
-    double effort{0.0};
-    double pwm{0.0};
-    ControlMode mode{ControlMode::Position};
-  };
-
   bool connect(const std::string & port_name, int baud_rate) override;
   void disconnect() override;
   bool ping(uint8_t id, uint16_t * model_number = nullptr) override;
@@ -64,7 +65,22 @@ public:
   std::string last_error() const override;
 
 private:
-  std::unordered_map<uint8_t, ServoState> servos_;
+  struct Servo
+  {
+    ControlMode mode{ControlMode::Position};
+    bool torque{false};
+    double position{0.0};
+    double velocity{0.0};
+    double effort{0.0};
+    double goal_velocity{0.0};
+  };
+
+  Servo * find(uint8_t id);
+
+  std::unordered_map<uint8_t, Servo> servos_;
+  double last_period_{0.0};
+  bool connected_{false};
+  std::string last_error_;
 };
 
 }  // namespace dynamixel_hardware
