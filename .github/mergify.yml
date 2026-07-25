@@ -1,0 +1,57 @@
+# Label-driven backports (backport-humble / backport-jazzy / backport-lyrical).
+# If Mergify's OSS terms change, korthout/backport-action is the drop-in replacement - see README.
+pull_request_rules:
+  - name: Backport to humble at reviewers' discretion
+    conditions:
+      - base=rolling
+      - label=backport-humble
+    actions:
+      backport:
+        branches:
+          - humble
+
+  - name: Backport to jazzy at reviewers' discretion
+    conditions:
+      - base=rolling
+      - label=backport-jazzy
+    actions:
+      backport:
+        branches:
+          - jazzy
+
+  - name: Backport to lyrical at reviewers' discretion
+    conditions:
+      - base=rolling
+      - label=backport-lyrical
+    actions:
+      backport:
+        branches:
+          - lyrical
+
+  - name: Ask author to resolve conflicts
+    conditions:
+      - conflict
+      - author!=mergify[bot]
+    actions:
+      comment:
+        message: |
+          This pull request is in conflict. Could you fix it @{{author}}?
+
+  - name: Ping maintainer when a Mergify backport conflicts
+    conditions:
+      - conflict
+      - author=mergify[bot]
+    actions:
+      comment:
+        message: |
+          This backport pull request is in conflict and needs manual resolution. @youtalk, please take a look.
+
+  - name: Development targets the rolling branch
+    conditions:
+      - base!=rolling
+      - author!=mergify[bot]
+      - author!=dependabot[bot]
+    actions:
+      comment:
+        message: |
+          @{{author}}, all development happens on the `rolling` branch: please target this pull request at `rolling`. Once merged there, it can be backported to `humble`, `jazzy`, or `lyrical` by adding the corresponding `backport-*` label.
