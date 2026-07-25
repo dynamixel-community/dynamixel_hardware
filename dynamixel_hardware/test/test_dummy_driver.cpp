@@ -14,6 +14,7 @@
 
 #include <gmock/gmock.h>
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -112,6 +113,170 @@ TEST(TestDummyDriver, leaving_velocity_mode_stops_integration)
   ASSERT_TRUE(driver.read_states({1}, positions, velocities, efforts));
   EXPECT_DOUBLE_EQ(0.0, positions[0]);
   EXPECT_DOUBLE_EQ(0.0, velocities[0]);
+}
+
+// ---------------------------------------------------------------------------
+// M3 (feat/control-modes): per-mode emulation equivalence — one test per row
+// of the design-spec mode table, plus the #71 velocity-integration regression.
+// ---------------------------------------------------------------------------
+
+class DummyAllModesTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    ASSERT_TRUE(driver_.connect("/dev/null", 1000000));
+    ASSERT_TRUE(driver_.setup({1, 2}));
+  }
+
+  double position_of(uint8_t id)
+  {
+    read();
+    return positions_[id == 1 ? 0 : 1];
+  }
+
+  double velocity_of(uint8_t id)
+  {
+    read();
+    return velocities_[id == 1 ? 0 : 1];
+  }
+
+  double effort_of(uint8_t id)
+  {
+    read();
+    return efforts_[id == 1 ? 0 : 1];
+  }
+
+  void read()
+  {
+    ASSERT_TRUE(driver_.read_states({1, 2}, positions_, velocities_, efforts_));
+  }
+
+  dynamixel_hardware::DummyDriver driver_;
+  std::vector<double> positions_;
+  std::vector<double> velocities_;
+  std::vector<double> efforts_;
+};
+
+TEST_F(DummyAllModesTest, AcceptsAllEightControlModes)
+{
+  const dynamixel_hardware::ControlMode modes[] = {
+    dynamixel_hardware::ControlMode::Position,
+    dynamixel_hardware::ControlMode::Velocity,
+    dynamixel_hardware::ControlMode::Current,
+    dynamixel_hardware::ControlMode::Torque,
+    dynamixel_hardware::ControlMode::ExtendedPosition,
+    dynamixel_hardware::ControlMode::MultiTurn,
+    dynamixel_hardware::ControlMode::CurrentBasedPosition,
+    dynamixel_hardware::ControlMode::PWM,
+  };
+  for (const auto mode : modes) {
+    EXPECT_TRUE(driver_.set_control_mode(1, mode));
+  }
+}
+
+TEST_F(DummyAllModesTest, PingReportsDummyModel)
+{
+  uint16_t model_number = 0;
+  EXPECT_TRUE(driver_.ping(1, &model_number));
+  EXPECT_EQ(1030, model_number);  // XM430-W350
+}
+
+TEST_F(DummyAllModesTest, PositionModeReflectsCommandAndDerivesVelocity)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Position));
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_positions({1}, {0.5}));
+  EXPECT_DOUBLE_EQ(0.5, position_of(1));
+  EXPECT_NEAR(5.0, velocity_of(1), 1e-9);  // (0.5 - 0.0) / 0.1
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_positions({1}, {0.5}));  // unchanged command
+  EXPECT_NEAR(0.0, velocity_of(1), 1e-9);
+}
+
+TEST_F(DummyAllModesTest, PositionModeClampsToSingleTurnRange)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Position));
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_positions({1}, {4.0}));
+  EXPECT_DOUBLE_EQ(M_PI, position_of(1));
+  ASSERT_TRUE(driver_.write_positions({1}, {-4.0}));
+  EXPECT_DOUBLE_EQ(-M_PI, position_of(1));
+}
+
+TEST_F(DummyAllModesTest, ExtendedPositionAndMultiTurnDoNotWrap)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::ExtendedPosition));
+  ASSERT_TRUE(driver_.set_control_mode(2, dynamixel_hardware::ControlMode::MultiTurn));
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_positions({1, 2}, {4.0 * M_PI, -12.0}));
+  EXPECT_DOUBLE_EQ(4.0 * M_PI, position_of(1));
+  EXPECT_DOUBLE_EQ(-12.0, position_of(2));
+}
+
+TEST_F(DummyAllModesTest, VelocityModeIntegratesOverTicks)
+{
+  // Regression for #71: dummy velocity control previously did nothing.
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Velocity));
+  ASSERT_TRUE(driver_.write_velocities({1}, {1.0}));
+  for (int i = 0; i < 5; ++i) {
+    driver_.tick(0.1);
+  }
+  EXPECT_NEAR(0.5, position_of(1), 1e-9);
+  EXPECT_DOUBLE_EQ(1.0, velocity_of(1));
+}
+
+TEST_F(DummyAllModesTest, CurrentAndTorqueModesMirrorEffortAndHoldKinematics)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Current));
+  ASSERT_TRUE(driver_.set_control_mode(2, dynamixel_hardware::ControlMode::Torque));
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_efforts({1, 2}, {123.0, -45.0}));
+  EXPECT_DOUBLE_EQ(123.0, effort_of(1));
+  EXPECT_DOUBLE_EQ(-45.0, effort_of(2));
+  EXPECT_DOUBLE_EQ(0.0, position_of(1));
+  EXPECT_DOUBLE_EQ(0.0, velocity_of(1));
+}
+
+TEST_F(DummyAllModesTest, CurrentBasedPositionTracksPositionAndReportsCap)
+{
+  ASSERT_TRUE(
+    driver_.set_control_mode(1, dynamixel_hardware::ControlMode::CurrentBasedPosition));
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_positions({1}, {7.0}));  // beyond pi: CBP is multi-turn, no clamp
+  ASSERT_TRUE(driver_.write_efforts({1}, {300.0}));
+  EXPECT_DOUBLE_EQ(7.0, position_of(1));
+  EXPECT_DOUBLE_EQ(300.0, effort_of(1));
+}
+
+TEST_F(DummyAllModesTest, PwmModeMirrorsDutyToEffort)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::PWM));
+  driver_.tick(0.1);
+  ASSERT_TRUE(driver_.write_pwms({1}, {0.25}));
+  EXPECT_DOUBLE_EQ(0.25, effort_of(1));
+  EXPECT_DOUBLE_EQ(0.0, position_of(1));
+}
+
+TEST_F(DummyAllModesTest, RejectsWritesNotMatchingTheActiveMode)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Velocity));
+  EXPECT_FALSE(driver_.write_positions({1}, {1.0}));
+  EXPECT_FALSE(driver_.last_error().empty());
+  EXPECT_FALSE(driver_.write_pwms({1}, {0.5}));
+  EXPECT_FALSE(driver_.write_efforts({1}, {10.0}));
+}
+
+TEST_F(DummyAllModesTest, ModeSwitchClearsVelocityGoal)
+{
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Velocity));
+  ASSERT_TRUE(driver_.write_velocities({1}, {1.0}));
+  driver_.tick(0.1);
+  const double moved = position_of(1);
+  EXPECT_NEAR(0.1, moved, 1e-9);
+  ASSERT_TRUE(driver_.set_control_mode(1, dynamixel_hardware::ControlMode::Position));
+  driver_.tick(0.1);
+  EXPECT_DOUBLE_EQ(moved, position_of(1));  // no further integration after the switch
 }
 
 }  // namespace
