@@ -15,6 +15,7 @@
 #include <gmock/gmock.h>
 
 #include <cstdint>
+#include <vector>
 
 #include "dynamixel_hardware/workbench_driver.hpp"
 
@@ -77,6 +78,43 @@ TEST(TestWorkbenchDriver, read_window_degenerates_when_all_items_share_one_addre
     make_item(100, 2), make_item(100, 2), make_item(100, 2), start_address, read_length);
   EXPECT_EQ(100u, start_address);
   EXPECT_EQ(8u, read_length);
+}
+
+// Regression: DynamixelWorkbench leaves its port/packet handler pointers
+// uninitialized until init() runs, and its destructor dereferences them, so a
+// WorkbenchDriver that is constructed and never connected must not own one.
+// The plugin builds a driver in on_init, long before on_configure connects.
+TEST(TestWorkbenchDriver, destroying_an_unconnected_driver_does_not_crash)
+{
+  WorkbenchDriver driver;
+  EXPECT_EQ("", driver.last_error());
+}
+
+TEST(TestWorkbenchDriver, calls_before_connect_fail_with_not_connected)
+{
+  WorkbenchDriver driver;
+  EXPECT_FALSE(driver.ping(1));
+  EXPECT_EQ("not connected", driver.last_error());
+  EXPECT_FALSE(driver.setup({1, 2}));
+  EXPECT_EQ("not connected", driver.last_error());
+  EXPECT_FALSE(driver.set_torque(1, true));
+  EXPECT_FALSE(driver.set_control_mode(1, dynamixel_hardware::ControlMode::Position));
+  EXPECT_FALSE(driver.write_positions({1}, {0.0}));
+  EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_FALSE(driver.write_item(1, "Profile_Velocity", 100));
+  std::vector<double> positions;
+  std::vector<double> velocities;
+  std::vector<double> efforts;
+  EXPECT_FALSE(driver.read_states({1}, positions, velocities, efforts));
+  EXPECT_EQ("not connected", driver.last_error());
+}
+
+TEST(TestWorkbenchDriver, disconnect_without_connect_is_safe)
+{
+  WorkbenchDriver driver;
+  driver.disconnect();
+  driver.disconnect();
+  EXPECT_EQ("", driver.last_error());
 }
 
 }  // namespace

@@ -15,6 +15,7 @@
 #include "dynamixel_hardware/workbench_driver.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -38,8 +39,9 @@ constexpr const char * kPresentLoadItem = "Present_Load";
 
 bool WorkbenchDriver::connect(const std::string & port_name, int baud_rate)
 {
+  workbench_ = std::make_unique<DynamixelWorkbench>();
   const char * log = nullptr;
-  if (!workbench_.init(port_name.c_str(), baud_rate, &log)) {
+  if (!workbench_->init(port_name.c_str(), baud_rate, &log)) {
     capture_log(log);
     return false;
   }
@@ -48,15 +50,29 @@ bool WorkbenchDriver::connect(const std::string & port_name, int baud_rate)
 
 void WorkbenchDriver::disconnect()
 {
-  // DynamixelWorkbench does not expose a close API; the serial port is
-  // released when this object is destroyed.
+  // Destroying an initialized workbench closes the serial port. A workbench that
+  // was never initialized must never be destroyed at all — its base destructor
+  // dereferences port/packet handler pointers that init() would have set.
+  workbench_.reset();
+}
+
+bool WorkbenchDriver::ensure_workbench()
+{
+  if (!workbench_) {
+    last_error_ = "not connected";
+    return false;
+  }
+  return true;
 }
 
 bool WorkbenchDriver::ping(uint8_t id, uint16_t * model_number)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
   uint16_t model = 0;
-  if (!workbench_.ping(id, &model, &log)) {
+  if (!workbench_->ping(id, &model, &log)) {
     capture_log(log);
     return false;
   }
@@ -68,6 +84,9 @@ bool WorkbenchDriver::ping(uint8_t id, uint16_t * model_number)
 
 bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   if (ids.empty()) {
     last_error_ = "no joint ids configured";
     return false;
@@ -76,39 +95,39 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
 
   // Control-table name fallbacks keep both Protocol 2.0 (X series etc.) and
   // older Protocol 1.0 servos working.
-  const ControlItem * goal_position = workbench_.getItemInfo(ids[0], kGoalPositionItem);
+  const ControlItem * goal_position = workbench_->getItemInfo(ids[0], kGoalPositionItem);
   if (goal_position == nullptr) {
     last_error_ = std::string("control item not found: ") + kGoalPositionItem;
     return false;
   }
 
-  const ControlItem * goal_velocity = workbench_.getItemInfo(ids[0], kGoalVelocityItem);
+  const ControlItem * goal_velocity = workbench_->getItemInfo(ids[0], kGoalVelocityItem);
   if (goal_velocity == nullptr) {
-    goal_velocity = workbench_.getItemInfo(ids[0], kMovingSpeedItem);
+    goal_velocity = workbench_->getItemInfo(ids[0], kMovingSpeedItem);
   }
   if (goal_velocity == nullptr) {
     last_error_ = std::string("control item not found: ") + kGoalVelocityItem;
     return false;
   }
 
-  const ControlItem * present_position = workbench_.getItemInfo(ids[0], kPresentPositionItem);
+  const ControlItem * present_position = workbench_->getItemInfo(ids[0], kPresentPositionItem);
   if (present_position == nullptr) {
     last_error_ = std::string("control item not found: ") + kPresentPositionItem;
     return false;
   }
 
-  const ControlItem * present_velocity = workbench_.getItemInfo(ids[0], kPresentVelocityItem);
+  const ControlItem * present_velocity = workbench_->getItemInfo(ids[0], kPresentVelocityItem);
   if (present_velocity == nullptr) {
-    present_velocity = workbench_.getItemInfo(ids[0], kPresentSpeedItem);
+    present_velocity = workbench_->getItemInfo(ids[0], kPresentSpeedItem);
   }
   if (present_velocity == nullptr) {
     last_error_ = std::string("control item not found: ") + kPresentVelocityItem;
     return false;
   }
 
-  const ControlItem * present_current = workbench_.getItemInfo(ids[0], kPresentCurrentItem);
+  const ControlItem * present_current = workbench_->getItemInfo(ids[0], kPresentCurrentItem);
   if (present_current == nullptr) {
-    present_current = workbench_.getItemInfo(ids[0], kPresentLoadItem);
+    present_current = workbench_->getItemInfo(ids[0], kPresentLoadItem);
   }
   if (present_current == nullptr) {
     last_error_ = std::string("control item not found: ") + kPresentCurrentItem;
@@ -122,7 +141,7 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
   control_items_[kPresentCurrentItem] = present_current;
 
   // Sync write handler indices are fixed: 0 = goal position, 1 = goal velocity.
-  if (!workbench_.addSyncWriteHandler(
+  if (!workbench_->addSyncWriteHandler(
       control_items_[kGoalPositionItem]->address, control_items_[kGoalPositionItem]->data_length,
       &log))
   {
@@ -130,7 +149,7 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
     return false;
   }
 
-  if (!workbench_.addSyncWriteHandler(
+  if (!workbench_->addSyncWriteHandler(
       control_items_[kGoalVelocityItem]->address, control_items_[kGoalVelocityItem]->data_length,
       &log))
   {
@@ -143,7 +162,7 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
   compute_read_window(
     *control_items_[kPresentPositionItem], *control_items_[kPresentVelocityItem],
     *control_items_[kPresentCurrentItem], start_address, read_length);
-  if (!workbench_.addSyncReadHandler(start_address, read_length, &log)) {
+  if (!workbench_->addSyncReadHandler(start_address, read_length, &log)) {
     capture_log(log);
     return false;
   }
@@ -166,8 +185,11 @@ void WorkbenchDriver::compute_read_window(
 
 bool WorkbenchDriver::set_torque(uint8_t id, bool enabled)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
-  const bool ok = enabled ? workbench_.torqueOn(id, &log) : workbench_.torqueOff(id, &log);
+  const bool ok = enabled ? workbench_->torqueOn(id, &log) : workbench_->torqueOff(id, &log);
   if (!ok) {
     capture_log(log);
   }
@@ -176,16 +198,19 @@ bool WorkbenchDriver::set_torque(uint8_t id, bool enabled)
 
 bool WorkbenchDriver::set_control_mode(uint8_t id, ControlMode mode)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
   switch (mode) {
     case ControlMode::Position:
-      if (!workbench_.setPositionControlMode(id, &log)) {
+      if (!workbench_->setPositionControlMode(id, &log)) {
         capture_log(log);
         return false;
       }
       return true;
     case ControlMode::Velocity:
-      if (!workbench_.setVelocityControlMode(id, &log)) {
+      if (!workbench_->setVelocityControlMode(id, &log)) {
         capture_log(log);
         return false;
       }
@@ -199,13 +224,16 @@ bool WorkbenchDriver::set_control_mode(uint8_t id, ControlMode mode)
 bool WorkbenchDriver::write_positions(
   const std::vector<uint8_t> & ids, const std::vector<double> & radians)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
   std::vector<uint8_t> mutable_ids = ids;  // syncWrite takes non-const pointers
   std::vector<int32_t> commands(ids.size(), 0);
   for (size_t i = 0; i < ids.size(); i++) {
-    commands[i] = workbench_.convertRadian2Value(ids[i], static_cast<float>(radians[i]));
+    commands[i] = workbench_->convertRadian2Value(ids[i], static_cast<float>(radians[i]));
   }
-  if (!workbench_.syncWrite(
+  if (!workbench_->syncWrite(
       kGoalPositionIndex, mutable_ids.data(), mutable_ids.size(), commands.data(), 1, &log))
   {
     capture_log(log);
@@ -217,13 +245,16 @@ bool WorkbenchDriver::write_positions(
 bool WorkbenchDriver::write_velocities(
   const std::vector<uint8_t> & ids, const std::vector<double> & rad_per_sec)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
   std::vector<uint8_t> mutable_ids = ids;
   std::vector<int32_t> commands(ids.size(), 0);
   for (size_t i = 0; i < ids.size(); i++) {
-    commands[i] = workbench_.convertVelocity2Value(ids[i], static_cast<float>(rad_per_sec[i]));
+    commands[i] = workbench_->convertVelocity2Value(ids[i], static_cast<float>(rad_per_sec[i]));
   }
-  if (!workbench_.syncWrite(
+  if (!workbench_->syncWrite(
       kGoalVelocityIndex, mutable_ids.data(), mutable_ids.size(), commands.data(), 1, &log))
   {
     capture_log(log);
@@ -250,20 +281,23 @@ bool WorkbenchDriver::read_states(
   const std::vector<uint8_t> & ids, std::vector<double> & positions,
   std::vector<double> & velocities, std::vector<double> & efforts)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
   std::vector<uint8_t> mutable_ids = ids;
   std::vector<int32_t> position_values(ids.size(), 0);
   std::vector<int32_t> velocity_values(ids.size(), 0);
   std::vector<int32_t> current_values(ids.size(), 0);
 
-  if (!workbench_.syncRead(
+  if (!workbench_->syncRead(
       kPresentPositionVelocityCurrentIndex, mutable_ids.data(), mutable_ids.size(), &log))
   {
     capture_log(log);
     return false;
   }
 
-  if (!workbench_.getSyncReadData(
+  if (!workbench_->getSyncReadData(
       kPresentPositionVelocityCurrentIndex, mutable_ids.data(), mutable_ids.size(),
       control_items_[kPresentCurrentItem]->address,
       control_items_[kPresentCurrentItem]->data_length, current_values.data(), &log))
@@ -272,7 +306,7 @@ bool WorkbenchDriver::read_states(
     return false;
   }
 
-  if (!workbench_.getSyncReadData(
+  if (!workbench_->getSyncReadData(
       kPresentPositionVelocityCurrentIndex, mutable_ids.data(), mutable_ids.size(),
       control_items_[kPresentVelocityItem]->address,
       control_items_[kPresentVelocityItem]->data_length, velocity_values.data(), &log))
@@ -281,7 +315,7 @@ bool WorkbenchDriver::read_states(
     return false;
   }
 
-  if (!workbench_.getSyncReadData(
+  if (!workbench_->getSyncReadData(
       kPresentPositionVelocityCurrentIndex, mutable_ids.data(), mutable_ids.size(),
       control_items_[kPresentPositionItem]->address,
       control_items_[kPresentPositionItem]->data_length, position_values.data(), &log))
@@ -294,17 +328,20 @@ bool WorkbenchDriver::read_states(
   velocities.resize(ids.size());
   efforts.resize(ids.size());
   for (size_t i = 0; i < ids.size(); i++) {
-    positions[i] = workbench_.convertValue2Radian(ids[i], position_values[i]);
-    velocities[i] = workbench_.convertValue2Velocity(ids[i], velocity_values[i]);
-    efforts[i] = workbench_.convertValue2Current(current_values[i]);
+    positions[i] = workbench_->convertValue2Radian(ids[i], position_values[i]);
+    velocities[i] = workbench_->convertValue2Velocity(ids[i], velocity_values[i]);
+    efforts[i] = workbench_->convertValue2Current(current_values[i]);
   }
   return true;
 }
 
 bool WorkbenchDriver::write_item(uint8_t id, const std::string & item, int32_t value)
 {
+  if (!ensure_workbench()) {
+    return false;
+  }
   const char * log = nullptr;
-  if (!workbench_.itemWrite(id, item.c_str(), value, &log)) {
+  if (!workbench_->itemWrite(id, item.c_str(), value, &log)) {
     capture_log(log);
     return false;
   }

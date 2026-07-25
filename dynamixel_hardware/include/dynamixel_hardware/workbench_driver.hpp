@@ -18,6 +18,7 @@
 #include <dynamixel_workbench_toolbox/dynamixel_workbench.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -64,8 +65,10 @@ public:
 
 private:
   void capture_log(const char * log);
+  /// True when connect() has allocated the workbench; otherwise sets last_error_.
+  bool ensure_workbench();
 
-  DynamixelWorkbench workbench_;
+  std::unique_ptr<DynamixelWorkbench> workbench_;
   std::map<const char * const, const ControlItem *> control_items_;
   std::string last_error_;
 };
