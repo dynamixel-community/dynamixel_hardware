@@ -237,6 +237,16 @@ TEST(TestWorkbenchDriver, one_non_finite_element_rejects_the_whole_batch)
   EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
 }
 
+// Regression: a mismatched ids/values length would otherwise index past the
+// shorter vector inside the write_* loops (e.g. commands[i] against
+// values[i]); the same guard that checks finiteness must catch this first.
+TEST(TestWorkbenchDriver, mismatched_ids_and_values_length_is_rejected)
+{
+  WorkbenchDriver driver;
+  EXPECT_FALSE(driver.write_positions({1, 2}, {0.0}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("count"));
+}
+
 // ---------------------------------------------------------------------------
 // M3 (feat/control-modes): pure-function tests for the new mode helpers.
 // ---------------------------------------------------------------------------
