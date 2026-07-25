@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="test_robot">
+  <xacro:arg name="use_dummy" default="true"/>
+
+  <link name="base_link"/>
+  <link name="link1"/>
+  <link name="link2"/>
+
+  <joint name="joint1" type="revolute">
+    <parent link="base_link"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14" upper="3.14" effort="1.0" velocity="3.14"/>
+  </joint>
+  <joint name="joint2" type="revolute">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14" upper="3.14" effort="1.0" velocity="3.14"/>
+  </joint>
+
+  <ros2_control name="TestDynamixelHardware" type="system">
+    <hardware>
+      <plugin>dynamixel_hardware/DynamixelHardware</plugin>
+      <param name="port_name">/dev/ttyUSB0</param>
+      <param name="baud_rate">1000000</param>
+      <param name="use_dummy">$(arg use_dummy)</param>
+    </hardware>
+    <joint name="joint1">
+      <param name="id">1</param>
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <joint name="joint2">
+      <param name="id">2</param>
+      <command_interface name="position"/>
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </ros2_control>
+</robot>
