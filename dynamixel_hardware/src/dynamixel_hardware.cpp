@@ -80,14 +80,28 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
       RCLCPP_ERROR(logger(), "Joint '%s' has no 'id' parameter", joint_info.name.c_str());
       return CallbackReturn::ERROR;
     }
-    try {
-      joint.id = static_cast<uint8_t>(std::stoi(id_it->second));
-    } catch (const std::exception & e) {
+    // id is required, unlike the optional parameters parse_int_param() is
+    // normally used for -- so presence is checked above by hand, and once
+    // that passes, parse_int_param() (min_value 0) is reused for the
+    // non-numeric and negative cases so their error wording matches every
+    // other hardware parameter. The upper bound is intentionally a separate
+    // check: parse_int_param() only expresses a floor, and folding a ceiling
+    // into it for this one caller would complicate a helper every other
+    // parameter uses for a rule id alone needs. static_cast<uint8_t> is only
+    // safe to apply once parsed_id is confirmed inside [0, kMaxDynamixelId].
+    int parsed_id = 0;
+    const auto id_status =
+      parse_int_param(joint_params, "id", parsed_id, 0, joint_info.name.c_str());
+    if (id_status != CallbackReturn::SUCCESS) {
+      return id_status;
+    }
+    if (parsed_id > kMaxDynamixelId) {
       RCLCPP_ERROR(
-        logger(), "Joint '%s' has an invalid 'id' parameter '%s': %s", joint_info.name.c_str(),
-        id_it->second.c_str(), e.what());
+        logger(), "Joint '%s' has an invalid 'id' parameter: must be <= %d, got %d",
+        joint_info.name.c_str(), kMaxDynamixelId, parsed_id);
       return CallbackReturn::ERROR;
     }
+    joint.id = static_cast<uint8_t>(parsed_id);
 
     const auto mode_it = joint_params.find("control_mode");
     if (mode_it != joint_params.end() &&

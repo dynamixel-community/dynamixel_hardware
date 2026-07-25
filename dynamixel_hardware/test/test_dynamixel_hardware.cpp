@@ -1987,6 +1987,49 @@ TEST_F(ParamsRobustnessTest, DistinctJointIdsInitSuccessfully)
     CallbackReturn::SUCCESS);
 }
 
+// --- id range (Protocol 2.0: 0-252, 253 unused, 254 BROADCAST_ID) ----------
+
+// id used to be `static_cast<uint8_t>(std::stoi(...))` with no bounds check,
+// so an out-of-range value silently truncated instead of failing init: "300"
+// became 44, "-1" became 255. Every case here must be rejected outright.
+TEST_F(ParamsRobustnessTest, InvalidJointIdFailsInit)
+{
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "abc"}}), CallbackReturn::ERROR);
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "-1"}}), CallbackReturn::ERROR);
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "300"}}), CallbackReturn::ERROR);
+  // 253 is unused and 254 is BROADCAST_ID (dynamixel_sdk/packet_handler.h);
+  // neither addresses a single physical servo.
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "253"}}), CallbackReturn::ERROR);
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "254"}}), CallbackReturn::ERROR);
+}
+
+TEST_F(ParamsRobustnessTest, BoundaryJointIdsInitSuccessfully)
+{
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "0"}}), CallbackReturn::SUCCESS);
+  EXPECT_EQ(init_with(default_hw_params(), {{"id", "252"}}), CallbackReturn::SUCCESS);
+}
+
+// Before the range check landed, id "257" truncated through
+// static_cast<uint8_t> to 1 (257 % 256), which collided with joint1's real
+// id of 1 and was reported as a duplicate-id pair naming id 1 for both --
+// a confusing error for a completely different mistake. The range check must
+// run, and reject id 257 on its own terms, before the duplicate-id scan ever
+// sees it.
+TEST_F(ParamsRobustnessTest, OutOfRangeIdIsRejectedNotReportedAsDuplicate)
+{
+  captured_log().clear();
+  const rcutils_logging_output_handler_t previous_handler =
+    rcutils_logging_get_output_handler();
+  rcutils_logging_set_output_handler(capture_log_handler);
+  const auto result = init_with_joints(default_hw_params(), {{{"id", "1"}}, {{"id", "257"}}});
+  rcutils_logging_set_output_handler(previous_handler);
+  EXPECT_EQ(result, CallbackReturn::ERROR);
+  EXPECT_NE(captured_log().find("joint2"), std::string::npos);
+  // Not the duplicate-id message: that would misdiagnose an out-of-range id
+  // as two joints colliding on the same servo.
+  EXPECT_EQ(captured_log().find("distinct servo"), std::string::npos);
+}
+
 // --- per-joint torque tracking ---------------------------------------------
 
 // Regression: torque used to be tracked by one hardware-wide flag, which

@@ -44,6 +44,12 @@ namespace dynamixel_hardware
 /// Name of the custom PWM command interface (URDF <command_interface name="pwm"/>).
 constexpr char kPwmInterfaceName[] = "pwm";
 
+/// Largest valid individual Dynamixel servo id. Per
+/// dynamixel_sdk/packet_handler.h (Protocol 2.0), MAX_ID is 0xFC (252); id
+/// 253 (0xFD) is unused and 254 (0xFE, BROADCAST_ID) addresses every servo at
+/// once, so neither can name one physical joint.
+constexpr int kMaxDynamixelId = 252;
+
 struct JointValue
 {
   double position{0.0};

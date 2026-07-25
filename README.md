@@ -40,7 +40,7 @@ Per-joint parameters, inside each `<joint>` tag:
 
 | Parameter | Default | Description |
 | --- | --- | --- |
-| `id` | required | Dynamixel servo id. Two joints may not share one id; that is rejected at initialization, naming both joints and the id they collide on. |
+| `id` | required | Dynamixel servo id, `0`-`252`. Two joints may not share one id; that is rejected at initialization, naming both joints and the id they collide on. |
 | `control_mode` | `position` | Operating mode applied at configuration time: one of `position`, `extended_position`, `multi_turn`, `current_based_position`, `velocity`, `current`, `torque`, `pwm`. See [Configure the operating mode per joint](#configure-the-operating-mode-per-joint). |
 | `torque_constant` | unset | Motor torque constant in Nm/A; must be positive. When set, the `effort` interfaces of that joint are in Nm instead of the servo's mA. |
 | `gear_ratio` | `1.0` | Motor revolutions per joint revolution. See [Gearing and offsets](#gearing-and-offsets). |
