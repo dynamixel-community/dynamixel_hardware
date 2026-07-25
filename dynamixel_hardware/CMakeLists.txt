@@ -112,6 +112,15 @@ if(BUILD_TESTING)
     endfunction()
 
     add_ros_isolated_launch_test(test/launch/test_dummy_bringup.launch.py TIMEOUT 120)
+  else()
+    # Announced so the skip is greppable in the build log. Without this a
+    # dependency regression on a distro that is supposed to run the launch
+    # test would silently unregister it and leave CI green with the
+    # integration coverage gone. STATUS rather than WARNING on purpose:
+    # WARNING would give every rolling build a permanent '--- stderr' block,
+    # and a build that always warns is a build nobody reads.
+    message(STATUS
+      "controller_manager not found - skipping the dummy bringup launch test")
   endif()
 endif()
 

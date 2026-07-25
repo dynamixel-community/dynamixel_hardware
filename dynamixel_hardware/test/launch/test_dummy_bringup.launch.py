@@ -109,7 +109,10 @@ class TestDummyBringup(unittest.TestCase):
         rclpy.shutdown()
 
     def test_a_node_running(self):
-        check_node_running(self.node, 'controller_manager')
+        # 15 s rather than the 5 s default: this is the first thing checked
+        # after ReadyToTest(), so it absorbs the whole ros2_control_node
+        # startup on a cold, contended CI runner.
+        check_node_running(self.node, 'controller_manager', timeout=15.0)
 
     def test_b_controllers_running(self):
         check_controllers_running(
@@ -120,7 +123,10 @@ class TestDummyBringup(unittest.TestCase):
 
     def test_d_trajectory_convergence(self):
         # DummyDriver reflects position commands into state, so a JTC goal
-        # must show up on /joint_states once the trajectory finishes.
+        # must show up on /joint_states while the trajectory runs. The poll
+        # below is satisfied as soon as the spline comes within 0.05 rad of
+        # the target, which happens before time_from_start elapses -- it does
+        # not wait for the trajectory to finish.
         target = {'joint1': 0.5, 'joint2': -0.5}
         publisher = self.node.create_publisher(
             JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 1)
