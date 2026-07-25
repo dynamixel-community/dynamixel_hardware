@@ -93,19 +93,24 @@ if(BUILD_TESTING)
     ros2_control_test_assets::ros2_control_test_assets
   )
 
-  find_package(ament_cmake_ros REQUIRED)
-  find_package(launch_testing_ament_cmake REQUIRED)
-
-  function(add_ros_isolated_launch_test path)
-    set(RUNNER "${ament_cmake_ros_DIR}/run_test_isolated.py")
-    add_launch_test("${path}" RUNNER "${RUNNER}" ${ARGN})
-  endfunction()
-
   # controller_manager has no installable rolling binaries during the
   # Ubuntu-resolute transition (released in rosdistro, buildfarm not yet
   # synced) — register the launch test only where it can actually run.
+  # Everything the launch test needs, including the REQUIRED find_package
+  # calls, lives inside the guard: the same incomplete rolling dependency
+  # set that makes controller_manager unavailable can just as well drop
+  # these, and a REQUIRED lookup out here would turn the graceful skip into
+  # a hard build failure on the one distro the guard exists for.
   find_package(controller_manager QUIET)
   if(controller_manager_FOUND)
+    find_package(ament_cmake_ros REQUIRED)
+    find_package(launch_testing_ament_cmake REQUIRED)
+
+    function(add_ros_isolated_launch_test path)
+      set(RUNNER "${ament_cmake_ros_DIR}/run_test_isolated.py")
+      add_launch_test("${path}" RUNNER "${RUNNER}" ${ARGN})
+    endfunction()
+
     add_ros_isolated_launch_test(test/launch/test_dummy_bringup.launch.py TIMEOUT 120)
   endif()
 endif()
