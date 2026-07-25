@@ -64,6 +64,10 @@ struct Joint
   ControlMode active_mode{ControlMode::Position};
   /// Claimed position and velocity together -> legacy write() heuristic.
   bool legacy{false};
+  /// Whether this servo is believed to be energized right now. Tracked per
+  /// joint because a partial failure -- one servo torqued, the next one
+  /// refusing -- is a state no hardware-wide flag can represent.
+  bool torque_enabled{false};
   /// Nm/A; 0.0 means unset and the effort interfaces carry milliamps.
   double torque_constant{0.0};
   /// Motor revolutions per joint revolution. Positions/velocities are divided
@@ -180,6 +184,9 @@ private:
   bool read_joint_states();
   return_type handle_write_result(const bool ok);
   return_type set_torque_all(const bool enabled);
+  /// True iff every joint reports torque on. Vacuously true without joints:
+  /// there is nothing de-energized to report.
+  bool all_torque_enabled() const;
   /// Torque off -> set_control_mode -> extra-parameter rewrite -> torque on.
   return_type apply_mode_switch(
     const std::vector<size_t> & indices, const std::vector<ControlMode> & modes);
@@ -215,7 +222,6 @@ private:
   int baud_rate_{0};
   bool use_dummy_{false};
   bool torque_enable_param_{true};
-  bool torque_enabled_{false};
   /// Consecutive read_states() failures tolerated before read() escalates to
   /// return_type::ERROR; see read_joint_states() callers.
   int read_error_tolerance_{5};

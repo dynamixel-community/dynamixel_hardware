@@ -492,14 +492,17 @@ CallbackReturn DynamixelHardware::on_error(const rclcpp_lifecycle::State & /* pr
   if (driver_) {
     // Every servo must still be tried when one of them fails, so this cannot
     // use set_torque_all(), which stops at the first failure.
-    for (const auto & joint : joints_) {
+    for (auto & joint : joints_) {
+      // Cleared before the call, as in apply_mode_switch(): the component is
+      // on its way down and a stale `true` would report a servo this path
+      // just cut power to as still energized.
+      joint.torque_enabled = false;
       if (!driver_->set_torque(joint.id, false)) {
         RCLCPP_ERROR(
           logger(), "Failed to disable torque of id %d: %s", joint.id,
           driver_->last_error().c_str());
       }
     }
-    torque_enabled_ = false;
     driver_->disconnect();
   }
   return CallbackReturn::SUCCESS;
@@ -658,18 +661,20 @@ return_type DynamixelHardware::perform_command_mode_switch(
       "error until torque is restored by a successful switch or by re-activating the component");
     return return_type::ERROR;
   }
-  if (torque_enabled_ || !torque_enable_param_) {
-    // Only an energized outcome clears the fault. apply_mode_switch() also
-    // returns OK when it touched no torque at all -- an empty switch, or one
-    // performed while the servos are already de-energized by a previous
+  if (all_torque_enabled() || !torque_enable_param_) {
+    // Only a fully energized outcome clears the fault. apply_mode_switch()
+    // also returns OK when it touched no torque at all -- an empty switch, or
+    // one performed while the servos are already de-energized by a previous
     // failure -- and clearing on those would report a limp joint as healthy
-    // again, which is exactly what the latch exists to prevent. The
-    // exception is torque_enable_param_ == false: there, staying de-energized
-    // IS the intended healthy outcome (that is the whole point of the
-    // parameter), so a successful switch is the best result available and
-    // must clear the latch -- the plain torque_enabled_ check still governs
-    // the normal (torque_enable_param_ true) configuration, where clearing on
-    // a de-energized outcome would misreport a limp joint as healthy.
+    // again, which is exactly what the latch exists to prevent. Every joint
+    // has to be energized, not just the ones this switch touched: a joint
+    // left limp by an earlier failure is still limp. The exception is
+    // torque_enable_param_ == false: there, staying de-energized IS the
+    // intended healthy outcome (that is the whole point of the parameter), so
+    // a successful switch is the best result available and must clear the
+    // latch -- the all_torque_enabled() check still governs the normal
+    // (torque_enable_param_ true) configuration, where clearing on a
+    // de-energized outcome would misreport a limp joint as healthy.
     switch_failed_ = false;
   }
   // The claim bookkeeping is only committed once the servos accepted the
@@ -876,20 +881,39 @@ return_type DynamixelHardware::set_torque_all(const bool enabled)
     RCLCPP_DEBUG(logger(), "torque_enable is false: skipping torque on");
     return return_type::OK;
   }
-  for (const auto & joint : joints_) {
+  bool any_transitioned = false;
+  for (size_t i = 0; i < joints_.size(); i++) {
+    auto & joint = joints_[i];
     if (!driver_->set_torque(joint.id, enabled)) {
       RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
       return return_type::ERROR;
     }
+    // Recorded as each call returns, so the early return above leaves the
+    // joints this sweep already reached reporting what actually happened to
+    // them rather than the state the sweep was aiming for.
+    if (joint.torque_enabled == enabled) {
+      continue;
+    }
+    joint.torque_enabled = enabled;
+    any_transitioned = true;
+    if (enabled) {
+      // Commands are re-synced from the current state before the servo can
+      // act on them, so torque coming on never replays a stale goal.
+      reset_joint_command(i);
+    }
   }
-  if (enabled && !torque_enabled_) {
-    reset_command();
-    RCLCPP_INFO(logger(), "Torque enabled");
-  } else if (!enabled && torque_enabled_) {
-    RCLCPP_INFO(logger(), "Torque disabled");
+  // One line for the whole sweep, and only when something actually changed:
+  // per joint this would spam a 5-servo arm's log on every activation.
+  if (any_transitioned) {
+    RCLCPP_INFO(logger(), "%s", enabled ? "Torque enabled" : "Torque disabled");
   }
-  torque_enabled_ = enabled;
   return return_type::OK;
+}
+
+bool DynamixelHardware::all_torque_enabled() const
+{
+  return std::all_of(
+    joints_.cbegin(), joints_.cend(), [](const Joint & joint) {return joint.torque_enabled;});
 }
 
 return_type DynamixelHardware::apply_mode_switch(
@@ -899,21 +923,25 @@ return_type DynamixelHardware::apply_mode_switch(
     return return_type::OK;
   }
   // Dynamixel requirement: the operating mode can only change with torque off.
-  const bool was_torque_enabled = torque_enabled_;
-  if (was_torque_enabled) {
-    // torque_enabled_ is a single hardware-wide approximation (per-joint
-    // torque state is a separate milestone), so it is maintained to follow the
-    // leg in flight. While the servos being switched are de-energized it must
-    // read false: a stale `true` would make write() sync-write goals to limp
-    // servos and would make the next switch believe it still has to cycle
-    // torque. Joints outside `indices` may still be energized -- that is
-    // exactly why the re-enable leg below sets the flag before its loop.
-    torque_enabled_ = false;
-    for (const auto index : indices) {
-      if (!driver_->set_torque(joints_[index].id, false)) {
-        RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
-        return return_type::ERROR;
-      }
+  // Only the joints this switch actually de-energizes are collected, so a
+  // joint that was already limp is not silently energized by the re-enable leg
+  // below, and a joint outside `indices` is never touched at all.
+  std::vector<size_t> de_energized;
+  de_energized.reserve(indices.size());
+  for (const auto index : indices) {
+    auto & joint = joints_[index];
+    if (!joint.torque_enabled) {
+      continue;
+    }
+    // Cleared before the call, not after: while the servo is being
+    // de-energized its flag must read false, because a stale `true` would
+    // make write() sync-write goals to a limp servo and would make the next
+    // switch believe it still has to cycle torque.
+    joint.torque_enabled = false;
+    de_energized.push_back(index);
+    if (!driver_->set_torque(joint.id, false)) {
+      RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
+      return return_type::ERROR;
     }
   }
   for (size_t k = 0; k < indices.size(); k++) {
@@ -931,14 +959,16 @@ return_type DynamixelHardware::apply_mode_switch(
   if (write_extra_joint_params(indices) != CallbackReturn::SUCCESS) {
     return return_type::ERROR;
   }
-  if (was_torque_enabled && torque_enable_param_) {
-    // Set before the loop, not after it: a partial failure still leaves the
-    // servos the loop already reached energized, and under-reporting that
-    // would make the next switch skip the mandatory torque-off leg and try to
-    // rewrite Operating_Mode on a torqued servo, which the firmware refuses.
-    torque_enabled_ = true;
-    for (const auto index : indices) {
-      if (!driver_->set_torque(joints_[index].id, true)) {
+  if (torque_enable_param_) {
+    for (const auto index : de_energized) {
+      auto & joint = joints_[index];
+      // Set before the call, not after it: a failed call still leaves the
+      // servo it was aimed at possibly energized, and under-reporting that
+      // would make the next switch skip the mandatory torque-off leg and try
+      // to rewrite Operating_Mode on a torqued servo, which the firmware
+      // refuses.
+      joint.torque_enabled = true;
+      if (!driver_->set_torque(joint.id, true)) {
         RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
