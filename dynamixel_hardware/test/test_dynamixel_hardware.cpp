@@ -2134,6 +2134,39 @@ TEST_F(ParamsRobustnessTest, ReturnDelayTimeWrittenOnConfigure)
   EXPECT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
 }
 
+// The extra control-table parameters are rewritten after every mode change
+// because a mode change resets the RAM registers among them to their
+// defaults. Return_Delay_Time is not one of those: it sits at X-series
+// control-table address 9, in the EEPROM area (as does Operating_Mode at 11),
+// and EEPROM survives a mode change -- so rewriting it there is one extra
+// per-joint blocking itemWrite() round-trip, on a path reachable from write(),
+// to restore a value that was never lost.
+TEST_F(ParamsRobustnessTest, ModeSwitchRewritesRamParametersButNotEepromOnes)
+{
+  ASSERT_EQ(
+    init_with(
+      default_hw_params(),
+      {{"id", "1"}, {"Profile_Velocity", "100"}, {"Return_Delay_Time", "0"}}),
+    CallbackReturn::SUCCESS);
+  // Configuration writes everything, RAM and EEPROM alike: that is the one
+  // moment the servo's EEPROM value is not known to match the URDF.
+  EXPECT_CALL(*mock_, write_item(1, ::testing::StrEq("Profile_Velocity"), 100))
+  .Times(1).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, write_item(1, ::testing::StrEq("Return_Delay_Time"), 0))
+  .Times(1).WillOnce(Return(true));
+  configure_activate();
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // A mode switch rewrites only what the mode change reset.
+  EXPECT_CALL(*mock_, write_item(1, ::testing::StrEq("Profile_Velocity"), 100))
+  .Times(1).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, write_item(1, ::testing::StrEq("Return_Delay_Time"), _)).Times(0);
+  const std::vector<std::string> start_interfaces = {"joint1/velocity"};
+  const std::vector<std::string> stop_interfaces = {"joint1/position"};
+  ASSERT_EQ(hw_.prepare_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+  EXPECT_EQ(hw_.perform_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+}
+
 // Two <joint> entries sharing one Dynamixel id would give the plugin two
 // independent active_mode/command/state records for a single physical
 // servo, which then fight each other on every write cycle -- this must be

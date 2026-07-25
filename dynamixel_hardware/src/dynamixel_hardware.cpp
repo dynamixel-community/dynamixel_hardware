@@ -33,15 +33,28 @@
 
 namespace dynamixel_hardware
 {
-constexpr const char * const kExtraJointParameters[] = {
-  "Profile_Velocity",
-  "Profile_Acceleration",
-  "Position_P_Gain",
-  "Position_I_Gain",
-  "Position_D_Gain",
-  "Velocity_P_Gain",
-  "Velocity_I_Gain",
-  "Return_Delay_Time",
+/// A control-table item a <joint> may set by name, and where it lives on the
+/// servo. RAM items are reset to their defaults by an operating-mode change,
+/// so they have to be rewritten after every switch; EEPROM items survive one
+/// and are written once, at configuration time.
+struct ExtraJointParameter
+{
+  const char * name;
+  bool ram;
+};
+
+constexpr ExtraJointParameter kExtraJointParameters[] = {
+  {"Profile_Velocity", true},
+  {"Profile_Acceleration", true},
+  {"Position_P_Gain", true},
+  {"Position_I_Gain", true},
+  {"Position_D_Gain", true},
+  {"Velocity_P_Gain", true},
+  {"Velocity_I_Gain", true},
+  // X-series control-table address 9, in the EEPROM area -- as is
+  // Operating_Mode at 11, which is why on_configure() has to set the mode
+  // explicitly (see there).
+  {"Return_Delay_Time", false},
 };
 
 namespace
@@ -468,7 +481,10 @@ CallbackReturn DynamixelHardware::on_configure(const rclcpp_lifecycle::State & /
 
   std::vector<size_t> all_indices(joints_.size());
   std::iota(all_indices.begin(), all_indices.end(), 0);
-  return write_extra_joint_params(all_indices);
+  // Configuration is the one point where the servo's EEPROM contents are not
+  // known to match the URDF, so everything is written here, RAM and EEPROM
+  // alike.
+  return write_extra_joint_params(all_indices, ExtraParamScope::kAll);
 }
 
 CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /* previous_state */)
@@ -1026,8 +1042,12 @@ return_type DynamixelHardware::apply_mode_switch(
       logger(), "Joint '%s' switched to %s control", info_.joints[indices[k]].name.c_str(),
       mode_name(modes[k]));
   }
-  // Extra control-table parameters live in RAM and are reset by a mode change.
-  if (write_extra_joint_params(indices) != CallbackReturn::SUCCESS) {
+  // A mode change resets the RAM control-table parameters to their defaults,
+  // so those are rewritten here. The EEPROM ones (Return_Delay_Time) survive
+  // it untouched: rewriting them would be one more blocking per-joint
+  // round-trip, on a path write() can reach, to restore a value that was
+  // never lost.
+  if (write_extra_joint_params(indices, ExtraParamScope::kRamOnly) != CallbackReturn::SUCCESS) {
     return return_type::ERROR;
   }
   if (torque_enable_param_) {
@@ -1126,12 +1146,16 @@ return_type DynamixelHardware::update_legacy_heuristic()
   return result;
 }
 
-CallbackReturn DynamixelHardware::write_extra_joint_params(const std::vector<size_t> & indices)
+CallbackReturn DynamixelHardware::write_extra_joint_params(
+  const std::vector<size_t> & indices, ExtraParamScope scope)
 {
   for (const auto index : indices) {
     const auto & joint_params = info_.joints[index].parameters;
-    for (const auto * param_name : kExtraJointParameters) {
-      const auto it = joint_params.find(param_name);
+    for (const auto & extra_param : kExtraJointParameters) {
+      if (scope == ExtraParamScope::kRamOnly && !extra_param.ram) {
+        continue;
+      }
+      const auto it = joint_params.find(extra_param.name);
       if (it == joint_params.end()) {
         continue;
       }
@@ -1141,15 +1165,15 @@ CallbackReturn DynamixelHardware::write_extra_joint_params(const std::vector<siz
       } catch (const std::exception & e) {
         RCLCPP_ERROR(
           logger(), "Joint '%s' has an invalid '%s' parameter '%s': %s",
-          info_.joints[index].name.c_str(), param_name, it->second.c_str(), e.what());
+          info_.joints[index].name.c_str(), extra_param.name, it->second.c_str(), e.what());
         return CallbackReturn::ERROR;
       }
-      if (!driver_->write_item(joints_[index].id, param_name, value)) {
+      if (!driver_->write_item(joints_[index].id, extra_param.name, value)) {
         RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return CallbackReturn::ERROR;
       }
       RCLCPP_INFO(
-        logger(), "%s set to %d for joint '%s'", param_name, value,
+        logger(), "%s set to %d for joint '%s'", extra_param.name, value,
         info_.joints[index].name.c_str());
     }
   }

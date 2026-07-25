@@ -45,7 +45,7 @@ Per-joint parameters, inside each `<joint>` tag:
 | `torque_constant` | unset | Motor torque constant in Nm/A; must be finite and positive (`nan`, `inf` and non-positive values are rejected at initialization). When set, the `effort` interfaces of that joint are in Nm instead of the servo's mA. |
 | `gear_ratio` | `1.0` | Motor revolutions per joint revolution. See [Gearing and offsets](#gearing-and-offsets). |
 | `offset` | `0.0` | Joint-side position offset in radians. See [Gearing and offsets](#gearing-and-offsets). |
-| `Profile_Velocity`, `Profile_Acceleration`, `Position_P_Gain`, `Position_I_Gain`, `Position_D_Gain`, `Velocity_P_Gain`, `Velocity_I_Gain`, `Return_Delay_Time` | unset | Integers written verbatim to that servo's control table on configure, and again after every mode change -- most of these are RAM registers reset by a mode change; `Return_Delay_Time` is the exception, an EEPROM register like `Operating_Mode` (see below), so a mode change does not reset it but the plugin still rewrites it every time. |
+| `Profile_Velocity`, `Profile_Acceleration`, `Position_P_Gain`, `Position_I_Gain`, `Position_D_Gain`, `Velocity_P_Gain`, `Velocity_I_Gain`, `Return_Delay_Time` | unset | Integers written verbatim to that servo's control table at configuration time. All but `Return_Delay_Time` are RAM registers that a mode change resets, so those are also rewritten after every mode change; `Return_Delay_Time` lives in EEPROM, survives a mode change, and is written once. |
 
 ### Gearing and offsets
 

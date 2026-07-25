@@ -62,6 +62,16 @@ enum class DoubleParamRule
   kFinitePositive,  ///< Finite and strictly positive (torque_constant).
 };
 
+/// Which of the extra control-table parameters write_extra_joint_params()
+/// writes. A mode change resets the RAM registers among them to their
+/// defaults, which is the whole reason they are rewritten after every switch;
+/// the EEPROM ones survive it and only need writing once.
+enum class ExtraParamScope
+{
+  kAll,      ///< Every configured parameter (on_configure).
+  kRamOnly,  ///< Only the ones a mode change resets (apply_mode_switch).
+};
+
 struct JointValue
 {
   double position{0.0};
@@ -228,7 +238,11 @@ private:
   return_type apply_mode_switch_or_latch(
     const std::vector<size_t> & indices, const std::vector<ControlMode> & modes);
   return_type update_legacy_heuristic();
-  CallbackReturn write_extra_joint_params(const std::vector<size_t> & indices);
+  /// Writes the configured extra control-table parameters of every joint in
+  /// indices; scope decides whether the EEPROM-resident ones are included
+  /// (see ExtraParamScope).
+  CallbackReturn write_extra_joint_params(
+    const std::vector<size_t> & indices, ExtraParamScope scope);
   void reset_command();
   void reset_joint_command(size_t index);
 
