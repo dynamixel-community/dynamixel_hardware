@@ -168,6 +168,10 @@ private:
   int baud_rate_{0};
   bool use_dummy_{false};
   bool torque_enabled_{false};
+  /// Latched by a failed perform_command_mode_switch(): the affected joints
+  /// are de-energized, so write() reports an error until the switch succeeds
+  /// or the component is re-activated.
+  bool switch_failed_{false};
 
   // Legacy write()-heuristic state (joints claiming position and velocity).
   ControlMode legacy_mode_{ControlMode::Position};

@@ -324,6 +324,9 @@ CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /*
   if (set_torque_all(true) != return_type::OK) {
     return CallbackReturn::ERROR;
   }
+  // Torque is on for every joint again, so a mode switch that failed before
+  // must not keep write() in its error state.
+  switch_failed_ = false;
   return CallbackReturn::SUCCESS;
 }
 
@@ -408,6 +411,11 @@ return_type DynamixelHardware::prepare_command_mode_switch(
           interface_type != hardware_interface::HW_IF_EFFORT &&
           interface_type != kPwmInterfaceName)
         {
+          if (!add) {
+            // Releasing an interface this plugin does not know about changes
+            // nothing; only a started one forces the legacy fallback.
+            continue;
+          }
           if (!unknown_interface_warned_) {
             RCLCPP_WARN(
               logger(), "Unknown command interface '%s'; keeping the legacy heuristic mode",
@@ -509,8 +517,20 @@ return_type DynamixelHardware::perform_command_mode_switch(
     }
   }
   if (apply_mode_switch(indices, modes) != return_type::OK) {
+    // ControllerManager only logs a non-OK return here and starts the
+    // controller anyway, so the failure has to keep being reported: the
+    // affected joints were de-energized by the torque-off leg and nothing
+    // else would ever surface the fault. write() escalates while the latch is
+    // set, which routes the component into on_error() -- the existing path
+    // that disables torque everywhere and disconnects.
+    switch_failed_ = true;
+    RCLCPP_ERROR(
+      logger(),
+      "Command mode switch failed; the affected joints are de-energized. write() will report an "
+      "error until the mode switch succeeds or the component is re-activated");
     return return_type::ERROR;
   }
+  switch_failed_ = false;
   // The claim bookkeeping is only committed once the servos accepted the
   // switch, so a rejected switch does not leave the plugin acting on claims
   // it never applied.
@@ -536,6 +556,12 @@ return_type DynamixelHardware::read(
 return_type DynamixelHardware::write(
   const rclcpp::Time & /* time */, const rclcpp::Duration & period)
 {
+  if (switch_failed_) {
+    // Already logged once by perform_command_mode_switch(); commanding
+    // de-energized servos would only pretend the cycle was healthy.
+    return return_type::ERROR;
+  }
+
   driver_->tick(period.seconds());
 
   // A failed mode switch leaves the servos with torque off, so it must not be
@@ -681,11 +707,13 @@ return_type DynamixelHardware::apply_mode_switch(
   // Dynamixel requirement: the operating mode can only change with torque off.
   const bool was_torque_enabled = torque_enabled_;
   if (was_torque_enabled) {
-    // From here on the servos are de-energized, and every early return below
-    // leaves them that way. torque_enabled_ must not keep claiming otherwise:
-    // a stale `true` would make write() sync-write goals to limp servos while
-    // reporting a healthy cycle, and would make the next mode switch believe
-    // it still has to cycle torque.
+    // torque_enabled_ is a single hardware-wide approximation (per-joint
+    // torque state is a separate milestone), so it is maintained to follow the
+    // leg in flight. While the servos being switched are de-energized it must
+    // read false: a stale `true` would make write() sync-write goals to limp
+    // servos and would make the next switch believe it still has to cycle
+    // torque. Joints outside `indices` may still be energized -- that is
+    // exactly why the re-enable leg below sets the flag before its loop.
     torque_enabled_ = false;
     for (const auto index : indices) {
       if (!driver_->set_torque(joints_[index].id, false)) {
@@ -710,13 +738,17 @@ return_type DynamixelHardware::apply_mode_switch(
     return return_type::ERROR;
   }
   if (was_torque_enabled) {
+    // Set before the loop, not after it: a partial failure still leaves the
+    // servos the loop already reached energized, and under-reporting that
+    // would make the next switch skip the mandatory torque-off leg and try to
+    // rewrite Operating_Mode on a torqued servo, which the firmware refuses.
+    torque_enabled_ = true;
     for (const auto index : indices) {
       if (!driver_->set_torque(joints_[index].id, true)) {
         RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
     }
-    torque_enabled_ = true;
   }
   for (const auto index : indices) {
     reset_joint_command(index);

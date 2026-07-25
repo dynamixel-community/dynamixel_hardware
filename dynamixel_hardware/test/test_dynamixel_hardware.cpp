@@ -806,12 +806,16 @@ TEST_F(ControlModeM3Test, unknown_control_mode_value_fails_on_init)
     CallbackReturn::ERROR, try_init("      <param name=\"control_mode\">banana</param>\n", ""));
 }
 
-TEST_F(ControlModeM3Test, malformed_torque_constant_fails_on_init)
+TEST_F(ControlModeM3Test, invalid_torque_constant_fails_on_init)
 {
   EXPECT_EQ(
     CallbackReturn::ERROR, try_init("      <param name=\"torque_constant\">abc</param>\n", ""));
   EXPECT_EQ(
     CallbackReturn::ERROR, try_init("      <param name=\"torque_constant\">-1.5</param>\n", ""));
+  // The exact boundary the "must be positive" check exists for: a zero
+  // constant would turn every effort command into a division by zero.
+  EXPECT_EQ(
+    CallbackReturn::ERROR, try_init("      <param name=\"torque_constant\">0</param>\n", ""));
 }
 
 TEST_F(ControlModeM3Test, velocity_claim_switches_mode_with_torque_sequencing)
@@ -924,6 +928,88 @@ TEST_F(ControlModeM3Test, failed_mode_switch_does_not_commit_the_claims)
   // velocity+effort pair.
   EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Current)).WillOnce(Return(true));
   EXPECT_EQ(return_type::OK, prepare_perform({"joint1/effort"}, {}));
+}
+
+TEST_F(ControlModeM3Test, write_reports_an_error_until_a_failed_mode_switch_recovers)
+{
+  init("", "");
+  configure_and_activate();
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(false));
+  ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity"}, {}));
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // ControllerManager only logs a failed switch and starts the controller
+  // anyway, so write() has to keep reporting the fault -- otherwise the
+  // de-energized joint would be commanded and look healthy forever.
+  EXPECT_CALL(*mock_, write_positions(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_velocities(_, _)).Times(0);
+  EXPECT_EQ(return_type::ERROR, write_once());
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // Re-activating the component energizes every joint again and clears it.
+  ASSERT_EQ(CallbackReturn::SUCCESS, hw_->on_activate(rclcpp_lifecycle::State()));
+  EXPECT_EQ(return_type::OK, write_once());
+}
+
+TEST_F(ControlModeM3Test, a_successful_mode_switch_clears_the_write_error)
+{
+  init("", "");
+  configure_and_activate();
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(false));
+  ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity"}, {}));
+  ASSERT_EQ(return_type::ERROR, write_once());
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
+  ASSERT_EQ(return_type::OK, prepare_perform({"joint1/pwm"}, {"joint1/velocity"}));
+  EXPECT_EQ(return_type::OK, write_once());
+}
+
+TEST_F(ControlModeM3Test, failed_torque_re_enable_still_counts_the_servos_as_energized)
+{
+  init("", "");
+  configure_and_activate();
+  // Both joints switch to Velocity; id 1 is re-energized and id 2 then fails.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(2, ControlMode::Velocity)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, true)).WillOnce(Return(false));
+  ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity", "joint2/velocity"}, {}));
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // id 1 is energized, so the next switch must still run the mandatory
+  // torque-off leg: Dynamixel firmware refuses an Operating_Mode rewrite
+  // while torque is on, so under-reporting here would silently lose the mode.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_EQ(return_type::OK, prepare_perform({"joint1/pwm"}, {"joint1/velocity"}));
+}
+
+TEST_F(ControlModeM3Test, releasing_an_unknown_interface_does_not_force_the_legacy_heuristic)
+{
+  init("", "");
+  configure_and_activate();
+  // Only a *started* unrecognised interface falls back to the heuristic;
+  // releasing one must leave the velocity claim in charge of the mode.
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).WillOnce(Return(true));
+  EXPECT_EQ(return_type::OK, prepare_perform({"joint1/velocity"}, {"joint1/acceleration"}));
+}
+
+TEST_F(ControlModeM3Test, current_based_position_without_an_effort_claim_writes_no_cap)
+{
+  init("      <param name=\"control_mode\">current_based_position</param>\n", "");
+  configure_and_activate();
+  ASSERT_EQ(return_type::OK, prepare_perform({"joint1/position"}, {}));
+  set_command(0, 0, 1.2);
+  // The cap must stay untouched so the servo keeps its Current_Limit default:
+  // reset_joint_command() zeroes command.effort, so a spurious cap write
+  // would command a 0 mA limit and leave the joint unable to move.
+  EXPECT_CALL(*mock_, write_efforts(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_positions(ElementsAre(1, 2), _)).WillOnce(Return(true));
+  EXPECT_EQ(return_type::OK, write_once());
 }
 
 TEST_F(ControlModeM3Test, torque_constant_converts_effort_command_to_milliamps)
