@@ -59,6 +59,9 @@ public:
     const std::vector<uint8_t> & ids, const std::vector<double> & values) = 0;
   virtual bool write_pwms(
     const std::vector<uint8_t> & ids, const std::vector<double> & duty_ratios) = 0;
+  /// On success, implementations must resize positions, velocities and
+  /// efforts to ids.size() before returning true -- the plugin indexes all
+  /// three by joint index without checking their size.
   virtual bool read_states(
     const std::vector<uint8_t> & ids, std::vector<double> & positions,
     std::vector<double> & velocities, std::vector<double> & efforts) = 0;

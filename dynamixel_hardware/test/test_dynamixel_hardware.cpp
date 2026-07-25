@@ -381,6 +381,16 @@ TEST_F(TestDynamixelHardware, on_configure_fails_when_ping_fails)
   EXPECT_EQ(CallbackReturn::ERROR, hw_.on_configure(rclcpp_lifecycle::State()));
 }
 
+TEST_F(TestDynamixelHardware, on_configure_fails_when_setup_fails)
+{
+  init_with_mock(kValidSystem);
+  EXPECT_CALL(*mock_, connect(_, _)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, ping(_, _)).WillRepeatedly(Return(true));
+  EXPECT_CALL(*mock_, setup(_)).WillOnce(Return(false));
+  EXPECT_CALL(*mock_, set_control_mode(_, _)).Times(0);
+  EXPECT_EQ(CallbackReturn::ERROR, hw_.on_configure(rclcpp_lifecycle::State()));
+}
+
 TEST_F(TestDynamixelHardware, on_configure_uses_usb_port_fallback)
 {
   init_with_mock(kUsbPortSystem);
@@ -411,6 +421,20 @@ TEST_F(TestDynamixelHardware, on_activate_reads_states_resets_commands_and_enabl
   EXPECT_CALL(*mock_, write_positions(_, ElementsAre(DoubleEq(0.5), DoubleEq(1.5))))
   .WillOnce(Return(true));
   EXPECT_EQ(return_type::OK, write_once());
+}
+
+// Regression: a failed initial sync-read must not leave the NaN state that
+// init_impl() seeds every joint with flowing into reset_command() and then
+// out to torque-enabled servos on the first write() (NaN != NaN, so the
+// change-detection in write() would treat it as a real command). on_activate
+// must refuse to enable torque when the post-read state is still NaN.
+TEST_F(TestDynamixelHardware, on_activate_fails_when_initial_read_fails)
+{
+  init_with_mock(kValidSystem);
+  ASSERT_EQ(CallbackReturn::SUCCESS, hw_.on_configure(rclcpp_lifecycle::State()));
+  EXPECT_CALL(*mock_, read_states(std::vector<uint8_t>{1, 2}, _, _, _)).WillOnce(Return(false));
+  EXPECT_CALL(*mock_, set_torque(_, true)).Times(0);
+  EXPECT_EQ(CallbackReturn::ERROR, hw_.on_activate(rclcpp_lifecycle::State()));
 }
 
 TEST_F(TestDynamixelHardware, on_deactivate_disables_torque)

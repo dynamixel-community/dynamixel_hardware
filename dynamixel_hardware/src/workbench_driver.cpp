@@ -54,12 +54,28 @@ void WorkbenchDriver::disconnect()
   // was never initialized must never be destroyed at all — its base destructor
   // dereferences port/packet handler pointers that init() would have set.
   workbench_.reset();
+  // getItemInfo() returns pointers owned by the (now-destroyed) workbench;
+  // drop them so a stale control_items_ can never be dereferenced after
+  // reconnecting.
+  control_items_.clear();
 }
 
 bool WorkbenchDriver::ensure_workbench()
 {
   if (!workbench_) {
     last_error_ = "not connected";
+    return false;
+  }
+  return true;
+}
+
+bool WorkbenchDriver::ensure_setup()
+{
+  if (!ensure_workbench()) {
+    return false;
+  }
+  if (control_items_.empty()) {
+    last_error_ = "not set up";
     return false;
   }
   return true;
@@ -87,6 +103,10 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
   if (!ensure_workbench()) {
     return false;
   }
+  // A failed re-setup() must not leave stale entries (pointers into a
+  // previous connection's now-freed workbench, or handler indices that no
+  // longer match) sitting around for a later call to trip over.
+  control_items_.clear();
   if (ids.empty()) {
     last_error_ = "no joint ids configured";
     return false;
@@ -224,7 +244,7 @@ bool WorkbenchDriver::set_control_mode(uint8_t id, ControlMode mode)
 bool WorkbenchDriver::write_positions(
   const std::vector<uint8_t> & ids, const std::vector<double> & radians)
 {
-  if (!ensure_workbench()) {
+  if (!ensure_setup()) {
     return false;
   }
   const char * log = nullptr;
@@ -245,7 +265,7 @@ bool WorkbenchDriver::write_positions(
 bool WorkbenchDriver::write_velocities(
   const std::vector<uint8_t> & ids, const std::vector<double> & rad_per_sec)
 {
-  if (!ensure_workbench()) {
+  if (!ensure_setup()) {
     return false;
   }
   const char * log = nullptr;
@@ -281,7 +301,7 @@ bool WorkbenchDriver::read_states(
   const std::vector<uint8_t> & ids, std::vector<double> & positions,
   std::vector<double> & velocities, std::vector<double> & efforts)
 {
-  if (!ensure_workbench()) {
+  if (!ensure_setup()) {
     return false;
   }
   const char * log = nullptr;

@@ -15,6 +15,7 @@
 #include "dynamixel_hardware/dynamixel_hardware.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <string>
@@ -246,6 +247,22 @@ CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /*
 {
   RCLCPP_DEBUG(logger(), "on_activate");
   read(rclcpp::Time{}, rclcpp::Duration(0, 0));
+
+  // read() logs and keeps the last known state on failure instead of
+  // returning an error (see read()). At first activation the last known
+  // state is the NaN that init_impl() seeds every joint with, so a failed
+  // initial sync-read must be caught here -- otherwise reset_command() would
+  // copy NaN into the command, and NaN != NaN would make write() sync-write
+  // it to servos that are about to have torque enabled.
+  for (size_t i = 0; i < joints_.size(); i++) {
+    if (std::isnan(joints_[i].state.position)) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has no valid position state; refusing to activate",
+        info_.joints[i].name.c_str());
+      return CallbackReturn::ERROR;
+    }
+  }
+
   reset_command();
   if (enable_torque(true) != return_type::OK) {
     return CallbackReturn::ERROR;

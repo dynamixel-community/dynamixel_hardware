@@ -67,6 +67,10 @@ private:
   void capture_log(const char * log);
   /// True when connect() has allocated the workbench; otherwise sets last_error_.
   bool ensure_workbench();
+  /// True when the workbench is connected and setup() has populated
+  /// control_items_; otherwise sets last_error_. Calls ensure_workbench()
+  /// first, so a never-connected driver still reports "not connected".
+  bool ensure_setup();
 
   std::unique_ptr<DynamixelWorkbench> workbench_;
   std::map<const char * const, const ControlItem *> control_items_;

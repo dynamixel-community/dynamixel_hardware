@@ -13,8 +13,10 @@
 // limitations under the License.
 
 #include <gmock/gmock.h>
+#include <pty.h>
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "dynamixel_hardware/workbench_driver.hpp"
@@ -23,6 +25,24 @@ namespace
 {
 
 using dynamixel_hardware::WorkbenchDriver;
+
+// Opens a pseudo-terminal pair and returns the slave side's device path.
+// DynamixelWorkbench::init() only opens and configures the serial port
+// (termios), it never talks to a real device, so a pty slave lets these
+// tests get WorkbenchDriver::connect() to genuinely succeed without any
+// Dynamixel hardware attached. The master fd is intentionally leaked for the
+// life of the test process: closing it would make the slave path invalid,
+// and these tests never send or receive bytes on it.
+std::string open_fake_serial_port()
+{
+  int master_fd = -1;
+  int slave_fd = -1;
+  char slave_name[256] = {};
+  if (openpty(&master_fd, &slave_fd, slave_name, nullptr, nullptr) != 0) {
+    return "";
+  }
+  return std::string(slave_name);
+}
 
 ControlItem make_item(uint16_t address, uint8_t data_length)
 {
@@ -115,6 +135,63 @@ TEST(TestWorkbenchDriver, disconnect_without_connect_is_safe)
   driver.disconnect();
   driver.disconnect();
   EXPECT_EQ("", driver.last_error());
+}
+
+// Regression: getItemInfo() returns pointers owned by the DynamixelWorkbench,
+// so read_states()/write_positions()/write_velocities() must refuse to run
+// (rather than dereference stale or never-populated pointers, or sync-write
+// through handler indices that setup() never registered) until setup() has
+// actually completed. connect() alone -- even a genuinely successful one --
+// must not be enough.
+TEST(TestWorkbenchDriver, calls_after_connect_before_setup_fail_with_not_set_up)
+{
+  const std::string port = open_fake_serial_port();
+  ASSERT_FALSE(port.empty());
+  WorkbenchDriver driver;
+  ASSERT_TRUE(driver.connect(port, 57600));
+
+  EXPECT_FALSE(driver.write_positions({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+  EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+  std::vector<double> positions;
+  std::vector<double> velocities;
+  std::vector<double> efforts;
+  EXPECT_FALSE(driver.read_states({1}, positions, velocities, efforts));
+  EXPECT_EQ("not set up", driver.last_error());
+}
+
+// Regression: disconnect() must clear control_items_ (not just reset the
+// workbench), so that even a driver that had -- hypothetically -- completed
+// setup() before is left refusing read/write calls again afterward, rather
+// than dereferencing pointers into the now-destroyed DynamixelWorkbench.
+// setup() itself cannot succeed without a real servo attached (getItemInfo()
+// needs a model pinged onto the workbench first), so this drives setup()
+// through its failure path -- which must not leave stale/partial entries in
+// control_items_ either -- then asserts the guarded calls are refused both
+// before and after disconnect(), with ensure_workbench() taking priority
+// once disconnected.
+TEST(TestWorkbenchDriver, disconnect_after_setup_attempt_leaves_calls_refused)
+{
+  const std::string port = open_fake_serial_port();
+  ASSERT_FALSE(port.empty());
+  WorkbenchDriver driver;
+  ASSERT_TRUE(driver.connect(port, 57600));
+
+  EXPECT_FALSE(driver.setup({1}));
+  EXPECT_FALSE(driver.write_positions({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+
+  driver.disconnect();
+  EXPECT_FALSE(driver.write_positions({1}, {0.0}));
+  EXPECT_EQ("not connected", driver.last_error());
+  EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_EQ("not connected", driver.last_error());
+  std::vector<double> positions;
+  std::vector<double> velocities;
+  std::vector<double> efforts;
+  EXPECT_FALSE(driver.read_states({1}, positions, velocities, efforts));
+  EXPECT_EQ("not connected", driver.last_error());
 }
 
 }  // namespace
