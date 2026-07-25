@@ -66,7 +66,7 @@ Reporting an error takes the hardware component through `on_error`, which disabl
 
 `write()` sends nothing at all until the first successful read after activation, and that first successful read also re-synchronizes the commands to the measured state. A flaky bus therefore cannot make the plugin sync-write a zero or NaN goal to servos it has just energized. Activation itself now succeeds even when its initial read fails -- it only logs a warning -- because that write guard is what keeps the bus safe until a real state arrives.
 
-A command that is not finite is refused by the serial driver before it is converted to servo units or sent: if any element of a batch is NaN or infinite, the whole batch is dropped rather than partially written, and the error names the offending id and value. A non-finite command is always a bug in the caller. The refusal counts against `write_error_tolerance` like any other write failure.
+A command that is not finite is refused by the serial driver before it is converted to servo units or sent: if any element of a batch is NaN, infinite, or too large to stay finite once narrowed to the single-precision float the conversion uses (magnitudes above roughly 3.4e38), the whole batch is dropped rather than partially written, and the error names the offending id and value. Such a command is always a bug in the caller. The refusal counts against `write_error_tolerance` like any other write failure.
 
 ### Read latency and Return_Delay_Time
 

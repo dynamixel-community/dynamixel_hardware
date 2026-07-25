@@ -88,7 +88,9 @@ private:
   /// otherwise sets last_error_. Calls ensure_workbench() first, so a
   /// never-connected driver still reports "not connected".
   bool ensure_setup();
-  /// True when values.size() == ids.size() and every element is finite;
+  /// True when values.size() == ids.size() and every element is still finite
+  /// after the narrowing to float that every conversion below performs (so
+  /// magnitudes above ~3.4e38 are refused alongside NaN and the infinities);
   /// otherwise sets last_error_ naming the offending id, its index in the
   /// batch, and label (e.g. "position"), and returns false. Called first in
   /// every write_* method, before ensure_setup(), so a non-finite command --

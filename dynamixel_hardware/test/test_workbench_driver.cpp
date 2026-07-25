@@ -237,6 +237,43 @@ TEST(TestWorkbenchDriver, one_non_finite_element_rejects_the_whole_batch)
   EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
 }
 
+// Regression: the guard has to be applied in the type the conversion actually
+// uses. Every write_* path narrows the double to float
+// (static_cast<float>(values[i])) before handing it to
+// convertRadian2Value()/convertVelocity2Value()/convertCurrent2Value(), which
+// assign the result to an int32_t -- and converting a non-finite float to an
+// integer type is undefined behavior, in a 100 Hz control loop. Any finite
+// double above ~3.4e38 becomes inf as a float, so checking std::isfinite() on
+// the double alone let the whole class through. Reachable from a diverging
+// controller passing through ~1e39 for one cycle on its way to NaN, or from a
+// pathological but accepted parameter (gear_ratio 1e300 is finite and
+// non-zero; torque_constant 1e-300 is finite and positive).
+TEST(TestWorkbenchDriver, finite_commands_that_overflow_float_are_rejected)
+{
+  WorkbenchDriver driver;
+
+  EXPECT_FALSE(driver.write_positions({1}, {1e300}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("ID 1"));
+  EXPECT_FALSE(driver.write_velocities({2}, {-1e300}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("ID 2"));
+  EXPECT_FALSE(driver.write_efforts({3}, {1e300}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("ID 3"));
+  // write_pwms() was never at risk -- duty_to_pwm_ticks() clamps to [-1, 1]
+  // before converting -- but it shares the guard, so a duty ratio this far out
+  // of range is now refused as the caller bug it is rather than silently
+  // clamped to full duty.
+  EXPECT_FALSE(driver.write_pwms({4}, {1e300}));
+  EXPECT_THAT(driver.last_error(), ::testing::HasSubstr("finite"));
+
+  // A magnitude that survives the narrowing still reaches the pre-existing
+  // connection guard, so the bound cannot swallow ordinary commands.
+  EXPECT_FALSE(driver.write_positions({1}, {1e30}));
+  EXPECT_EQ("not connected", driver.last_error());
+}
+
 // Regression: a mismatched ids/values length would otherwise index past the
 // shorter vector inside the write_* loops (e.g. commands[i] against
 // values[i]); the same guard that checks finiteness must catch this first.

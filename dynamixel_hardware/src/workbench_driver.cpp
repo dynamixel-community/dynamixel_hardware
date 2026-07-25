@@ -106,10 +106,18 @@ bool WorkbenchDriver::ensure_finite_commands(
     return false;
   }
   for (size_t i = 0; i < values.size(); i++) {
-    if (!std::isfinite(values[i])) {
-      last_error_ = "ID " + std::to_string(ids[i]) + " received a non-finite " +
-        std::string(label) + " command at index " + std::to_string(i) + ": " +
-        std::to_string(values[i]);
+    // Checked in the type the conversion actually uses, not in double: every
+    // caller below immediately narrows with static_cast<float>(), and
+    // convertRadian2Value()/convertVelocity2Value()/convertCurrent2Value()
+    // assign the result to an int32_t. A finite double above ~3.4e38 becomes
+    // inf as a float, and converting a non-finite float to an integer type is
+    // undefined behavior -- so the magnitudes that survive the double check
+    // but not the narrowing are exactly the ones this guard must catch. NaN
+    // and infinities narrow to themselves and are still caught.
+    if (!std::isfinite(static_cast<float>(values[i]))) {
+      last_error_ = "ID " + std::to_string(ids[i]) + " received a " + std::string(label) +
+        " command at index " + std::to_string(i) +
+        " that is not finite in the servo's float units: " + std::to_string(values[i]);
       return false;
     }
   }
