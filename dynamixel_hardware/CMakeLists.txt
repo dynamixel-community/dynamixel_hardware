@@ -26,6 +26,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(${PROJECT_NAME} SHARED
   src/dynamixel_hardware.cpp
+  src/dummy_driver.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -57,6 +58,13 @@ install(
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
+
+  find_package(ament_cmake_gmock REQUIRED)
+  find_package(ros2_control_test_assets REQUIRED)
+
+  ament_add_gmock(test_dummy_driver test/test_dummy_driver.cpp)
+  target_include_directories(test_dummy_driver PRIVATE include)
+  target_link_libraries(test_dummy_driver ${PROJECT_NAME})
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
