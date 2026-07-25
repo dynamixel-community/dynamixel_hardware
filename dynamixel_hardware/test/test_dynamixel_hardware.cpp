@@ -47,6 +47,7 @@ namespace
 
 using dynamixel_hardware::ControlMode;
 using dynamixel_hardware::DynamixelHardware;
+using dynamixel_hardware::kPwmInterfaceName;
 using dynamixel_hardware::MockDriver;
 using ::testing::_;
 using ::testing::AtLeast;
@@ -1387,11 +1388,40 @@ protected:
   {
 #if DXL_HAS_ON_EXPORT
     state_ifaces_ = hw_.on_export_state_interfaces();
+    command_ifaces_ = hw_.on_export_command_interfaces();
 #else
     state_ifaces_ = hw_.export_state_interfaces();
+    command_ifaces_ = hw_.export_command_interfaces();
 #endif
     ASSERT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
     ASSERT_EQ(hw_.on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  }
+
+  // Sets a command interface by name (DynamixelHardware always exports
+  // position/velocity/effort/pwm per joint, regardless of what the URDF
+  // <joint> block declares -- see on_export_command_interfaces()).
+  void set_command_value(const std::string & interface_name, double value)
+  {
+#if DXL_HAS_ON_EXPORT
+    for (const auto & ci : command_ifaces_) {
+      if (ci->get_interface_name() == interface_name) {
+#if DXL_HAS_PARAMS_ON_INIT
+        ASSERT_TRUE(ci->set_value(value));
+#else
+        ci->set_value(value);
+#endif
+        return;
+      }
+    }
+#else
+    for (auto & ci : command_ifaces_) {
+      if (ci.get_interface_name() == interface_name) {
+        ci.set_value(value);
+        return;
+      }
+    }
+#endif
+    ADD_FAILURE() << "command interface not found: " << interface_name;
   }
 
   double state_value(const std::string & interface_name)
@@ -1424,8 +1454,10 @@ protected:
   hardware_interface::HardwareInfo info_;
 #if DXL_HAS_ON_EXPORT
   std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_ifaces_;
+  std::vector<hardware_interface::CommandInterface::SharedPtr> command_ifaces_;
 #else
   std::vector<hardware_interface::StateInterface> state_ifaces_;
+  std::vector<hardware_interface::CommandInterface> command_ifaces_;
 #endif
 };
 
@@ -1855,6 +1887,31 @@ TEST_F(ParamsRobustnessTest, InvalidOffsetFailsInit)
     init_with(default_hw_params(), {{"id", "1"}, {"offset", "nan"}}), CallbackReturn::ERROR);
   EXPECT_EQ(
     init_with(default_hw_params(), {{"id", "1"}, {"offset", "inf"}}), CallbackReturn::ERROR);
+}
+
+// PWM duty ratios are never gear/offset-converted (#95/#94, #96/#93): they are
+// not a physical position/velocity/effort quantity, so a joint claiming only
+// the pwm interface must see its commanded duty ratio reach the driver
+// byte-for-byte even with a non-default gear_ratio AND offset. Covering both
+// parameters in one test (rather than one test per parameter) is deliberate:
+// the PWM exemption is presently protected only by a comment at the call
+// site (dynamixel_hardware.cpp), and "make it consistent with the position
+// path" is exactly the change a future contributor would make to that
+// comment-only invariant for either parameter.
+TEST_F(ParamsRobustnessTest, PwmIsUnaffectedByGearRatioAndOffset)
+{
+  ASSERT_EQ(
+    init_with(
+      default_hw_params(),
+      {{"id", "1"}, {"control_mode", "pwm"}, {"gear_ratio", "2.0"}, {"offset", "0.5"}}),
+    CallbackReturn::SUCCESS);
+  configure_activate();
+  set_command_value(kPwmInterfaceName, 0.25);
+  EXPECT_CALL(*mock_, write_pwms(_, ElementsAre(DoubleNear(0.25, 1e-9))))
+  .WillOnce(Return(true));
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
 }
 
 }  // namespace m4_test
