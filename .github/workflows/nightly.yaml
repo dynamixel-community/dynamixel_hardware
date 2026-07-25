@@ -77,7 +77,14 @@ jobs:
       - name: Check out dynamixel_hardware_examples
         shell: bash
         run: |
-          git clone -b ${{ matrix.branch }} https://github.com/dynamixel-community/dynamixel_hardware_examples src/dynamixel_hardware_examples
+          # Always main, never matrix.branch. The two repositories do not share
+          # a branch model: this one keeps a branch per distro, while
+          # dynamixel_hardware_examples deliberately serves every distro from a
+          # single main branch. Parameterising this clone by the matrix entry
+          # made all four jobs fail at checkout with "Remote branch <distro>
+          # not found in upstream origin"; matrix.branch belongs to the
+          # dynamixel_hardware checkout above and nowhere else in this job.
+          git clone -b main https://github.com/dynamixel-community/dynamixel_hardware_examples src/dynamixel_hardware_examples
       - uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
