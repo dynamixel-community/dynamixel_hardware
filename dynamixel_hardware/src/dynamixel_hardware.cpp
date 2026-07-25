@@ -647,21 +647,7 @@ return_type DynamixelHardware::perform_command_mode_switch(
       modes.push_back(pending_modes_[i]);
     }
   }
-  if (apply_mode_switch(indices, modes) != return_type::OK) {
-    // ControllerManager only logs a non-OK return here and starts the
-    // controller anyway, so the failure has to keep being reported: the
-    // affected joints were de-energized by the torque-off leg and nothing
-    // else would ever surface the fault. write() escalates while the latch is
-    // set, which routes the component into on_error() -- the existing path
-    // that disables torque everywhere and disconnects.
-    switch_failed_ = true;
-    RCLCPP_ERROR(
-      logger(),
-      "Command mode switch failed; the affected joints are de-energized. Re-activate the "
-      "component to energize them again -- a later mode switch will not, because restoring "
-      "torque is limited to joints that were energized when the switch began. write() reports "
-      "an error until then. (With torque_enable=false, de-energized is the intended state and "
-      "a successful switch clears the error.)");
+  if (apply_mode_switch_or_latch(indices, modes) != return_type::OK) {
     return return_type::ERROR;
   }
   if (all_torque_enabled() || !torque_enable_param_) {
@@ -991,6 +977,34 @@ return_type DynamixelHardware::apply_mode_switch(
   return return_type::OK;
 }
 
+return_type DynamixelHardware::apply_mode_switch_or_latch(
+  const std::vector<size_t> & indices, const std::vector<ControlMode> & modes)
+{
+  if (apply_mode_switch(indices, modes) != return_type::OK) {
+    // ControllerManager only logs a non-OK return here and starts the
+    // controller anyway, so the failure has to keep being reported: the
+    // affected joints were de-energized by the torque-off leg and nothing
+    // else would ever surface the fault. write() escalates while the latch is
+    // set, which routes the component into on_error() -- the existing path
+    // that disables torque everywhere and disconnects. Both
+    // perform_command_mode_switch() and update_legacy_heuristic() route
+    // through here, so a failure on either path latches identically -- the
+    // legacy path used to report return_type::ERROR for a single cycle
+    // without latching, so write() silently re-drove the already-de-energized
+    // servo through the driver on every later cycle (#112 follow-up).
+    switch_failed_ = true;
+    RCLCPP_ERROR(
+      logger(),
+      "Command mode switch failed; the affected joints are de-energized. Re-activate the "
+      "component to energize them again -- a later mode switch will not, because restoring "
+      "torque is limited to joints that were energized when the switch began. write() reports "
+      "an error until then. (With torque_enable=false, de-energized is the intended state and "
+      "a successful switch clears the error.)");
+    return return_type::ERROR;
+  }
+  return return_type::OK;
+}
+
 return_type DynamixelHardware::update_legacy_heuristic()
 {
   // Kept from the pre-M3 implementation for joints whose controller claims
@@ -1030,7 +1044,7 @@ return_type DynamixelHardware::update_legacy_heuristic()
     return return_type::OK;
   }
   const std::vector<ControlMode> modes(legacy_indices.size(), target);
-  const auto result = apply_mode_switch(legacy_indices, modes);
+  const auto result = apply_mode_switch_or_latch(legacy_indices, modes);
   if (result == return_type::OK) {
     legacy_mode_ = target;
   }

@@ -2209,6 +2209,48 @@ TEST_F(ParamsRobustnessTest, SwitchClearsLatchWhenEveryJointIsConfirmedEnergized
   EXPECT_EQ(hw_.write(t, p), return_type::OK);
 }
 
+// Regression (#112 follow-up item 3): a mode-switch failure surfaced only by
+// update_legacy_heuristic() -- i.e. a joint claiming position and velocity
+// together, not one going through prepare/perform_command_mode_switch() --
+// must latch switch_failed_ exactly like a failure on the non-legacy path.
+// Before this fix it did not: write() returned return_type::ERROR for the one
+// cycle in which the switch failed, but nothing latched, so every subsequent
+// write() call re-ran update_legacy_heuristic() and re-drove the
+// already-de-energized servo through the driver again. Asserting only the
+// first write()'s return value would pass against that bug, since it already
+// returns ERROR; the distinguishing assertion is that the driver calls below
+// are capped at Times(1) and a second write() must not exceed them.
+TEST_F(ParamsRobustnessTest, LegacyHeuristicSwitchFailureLatchesAcrossCycles)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  configure_activate();
+
+  // Claim position and velocity together so joint1 falls back to the legacy
+  // write() heuristic instead of the normal prepare/perform path (#112).
+  const std::vector<std::string> legacy_claim = {"joint1/position", "joint1/velocity"};
+  ASSERT_EQ(hw_.prepare_command_mode_switch(legacy_claim, {}), return_type::OK);
+  ASSERT_EQ(hw_.perform_command_mode_switch(legacy_claim, {}), return_type::OK);
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // A changed velocity command drives update_legacy_heuristic() to switch the
+  // joint to Velocity control; the driver rejects the mode write. Every call
+  // below is capped at its exact expected count, so a second write() cycle
+  // that re-attempts the switch fails the test rather than merely returning
+  // ERROR again.
+  set_command_value("velocity", 0.3);
+  EXPECT_CALL(*mock_, set_torque(1, false)).Times(1).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).Times(1).WillOnce(Return(false));
+  EXPECT_CALL(*mock_, set_torque(1, true)).Times(0);
+
+  const rclcpp::Time t;
+  const rclcpp::Duration p = rclcpp::Duration::from_seconds(0.01);
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+  // The latch must survive into the next cycle: write() should short-circuit
+  // before reaching update_legacy_heuristic() again, so none of the capped
+  // expectations above see a second call.
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+}
+
 }  // namespace m4_test
 
 }  // namespace

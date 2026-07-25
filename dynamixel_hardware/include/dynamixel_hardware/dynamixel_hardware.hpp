@@ -196,6 +196,18 @@ private:
   /// Torque off -> set_control_mode -> extra-parameter rewrite -> torque on.
   return_type apply_mode_switch(
     const std::vector<size_t> & indices, const std::vector<ControlMode> & modes);
+  /// Calls apply_mode_switch() and, on failure, latches switch_failed_ and logs
+  /// the operator-facing recovery message once. This is the single call site
+  /// perform_command_mode_switch() and update_legacy_heuristic() both route
+  /// through, so a failed switch is latched identically regardless of which
+  /// path triggered it -- previously the legacy path reported
+  /// return_type::ERROR for one cycle without latching, so write() silently
+  /// retried the switch every cycle after (#112 follow-up). Clearing
+  /// switch_failed_ on success stays perform_command_mode_switch()'s job alone
+  /// (its all_torque_enabled() / torque_enable_param_ check); this helper never
+  /// clears the latch.
+  return_type apply_mode_switch_or_latch(
+    const std::vector<size_t> & indices, const std::vector<ControlMode> & modes);
   return_type update_legacy_heuristic();
   CallbackReturn write_extra_joint_params(const std::vector<size_t> & indices);
   void reset_command();
