@@ -1765,8 +1765,41 @@ TEST_F(ParamsRobustnessTest, ReadErrorToleranceParameterIsRespected)
   EXPECT_EQ(hw_.read(t, p), return_type::ERROR);
 }
 
-// Non-numeric and out-of-range (< 1) values are rejected at init, not as an
-// uncaught exception or a silently-ignored parameter.
+// read_error_tolerance = 0 is the documented opt-out: escalation is a runtime
+// behavior change that lands on every existing user with no URDF change (this
+// plugin used to log a failed read and return OK forever), so an operator on a
+// marginal USB adapter or an electrically noisy bus -- exactly the population
+// #90 is about -- must have a configuration that restores the old ride-through
+// behavior. Failures are still counted and still warned about, because silence
+// would hide a dying bus; only the escalation is disabled.
+TEST_F(ParamsRobustnessTest, ReadErrorToleranceOfZeroNeverEscalates)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"read_error_tolerance", "0"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ON_CALL(*mock_, read_states(_, _, _, _)).WillByDefault(Return(false));
+
+  captured_log().clear();
+  const rcutils_logging_output_handler_t previous_handler =
+    rcutils_logging_get_output_handler();
+  rcutils_logging_set_output_handler(capture_log_handler);
+  for (int i = 0; i < 20; ++i) {
+    EXPECT_EQ(hw_.read(t, p), return_type::OK) << "failure " << (i + 1);
+  }
+  rcutils_logging_set_output_handler(previous_handler);
+  // Still counting (the 20th failure is reported as the 20th) and still
+  // warning, with the disabled tolerance named rather than printed as "/0".
+  EXPECT_THAT(captured_log(), ::testing::HasSubstr("read_states failed (20/disabled)"));
+}
+
+// Non-numeric and negative values are rejected at init, not as an uncaught
+// exception or a silently-ignored parameter. Zero is valid and means "never
+// escalate" (see ReadErrorToleranceOfZeroNeverEscalates).
 TEST_F(ParamsRobustnessTest, InvalidReadErrorToleranceFailsInit)
 {
   EXPECT_EQ(
@@ -1777,7 +1810,7 @@ TEST_F(ParamsRobustnessTest, InvalidReadErrorToleranceFailsInit)
     CallbackReturn::ERROR);
   EXPECT_EQ(
     init_with(
-      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"read_error_tolerance", "0"}},
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"read_error_tolerance", "-1"}},
       default_joint_params()),
     CallbackReturn::ERROR);
 }
@@ -1883,8 +1916,44 @@ TEST_F(ParamsRobustnessTest, WriteErrorToleranceOfOneEscalatesOnFirstFailure)
   EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
 }
 
-// Non-numeric and out-of-range (< 1) values are rejected at init, not as an
-// uncaught exception or a silently-ignored parameter.
+// write_error_tolerance = 0 is the same opt-out as on the read side, and is
+// kept independent of it: before this branch write() returned OK regardless of
+// what the driver reported, so a bus that only stutters on writes must be able
+// to keep that behavior without also giving up read escalation.
+TEST_F(ParamsRobustnessTest, WriteErrorToleranceOfZeroNeverEscalates)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"write_error_tolerance", "0"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();  // default reads succeed -> guard released
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ON_CALL(*mock_, write_positions(_, _)).WillByDefault(Return(false));
+
+  captured_log().clear();
+  const rcutils_logging_output_handler_t previous_handler =
+    rcutils_logging_get_output_handler();
+  rcutils_logging_set_output_handler(capture_log_handler);
+  for (int i = 0; i < 20; ++i) {
+    EXPECT_EQ(hw_.write(t, p), return_type::OK) << "failure " << (i + 1);
+  }
+  rcutils_logging_set_output_handler(previous_handler);
+  EXPECT_THAT(captured_log(), ::testing::HasSubstr("driver write failed (20/disabled)"));
+
+  // The read budget is untouched by the write opt-out: it still escalates at
+  // its own (defaulted) tolerance of 5.
+  ON_CALL(*mock_, read_states(_, _, _, _)).WillByDefault(Return(false));
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(hw_.read(t, p), return_type::OK);
+  }
+  EXPECT_EQ(hw_.read(t, p), return_type::ERROR);
+}
+
+// Non-numeric and negative values are rejected at init, not as an uncaught
+// exception or a silently-ignored parameter. Zero is valid and means "never
+// escalate" (see WriteErrorToleranceOfZeroNeverEscalates).
 TEST_F(ParamsRobustnessTest, InvalidWriteErrorToleranceFailsInit)
 {
   EXPECT_EQ(
@@ -1895,7 +1964,7 @@ TEST_F(ParamsRobustnessTest, InvalidWriteErrorToleranceFailsInit)
     CallbackReturn::ERROR);
   EXPECT_EQ(
     init_with(
-      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"write_error_tolerance", "0"}},
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"write_error_tolerance", "-1"}},
       default_joint_params()),
     CallbackReturn::ERROR);
 }

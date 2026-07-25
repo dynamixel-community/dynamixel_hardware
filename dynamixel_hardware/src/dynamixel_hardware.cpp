@@ -44,6 +44,17 @@ constexpr const char * const kExtraJointParameters[] = {
   "Return_Delay_Time",
 };
 
+namespace
+{
+/// Denominator of the failure-tolerance warnings: the configured limit, or
+/// "disabled" when it is 0 (failures are still counted and warned about, they
+/// just never escalate), which reads better than a bare "/0".
+std::string tolerance_text(int tolerance)
+{
+  return tolerance > 0 ? std::to_string(tolerance) : std::string("disabled");
+}
+}  // namespace
+
 #if DXL_HAS_PARAMS_ON_INIT
 CallbackReturn DynamixelHardware::on_init(
   const hardware_interface::HardwareComponentInterfaceParams & params)
@@ -210,14 +221,21 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
     return CallbackReturn::ERROR;
   }
 
+  // Both tolerances accept 0, which disables escalation for that direction.
+  // Escalating to return_type::ERROR is new behavior (read() used to log and
+  // return OK forever, write() returned OK regardless of the driver's result),
+  // and it lands on every existing user without any URDF change -- so the
+  // operator of a marginal USB adapter or an electrically noisy bus needs a
+  // configuration that restores the old ride-through behavior. Negative values
+  // stay rejected: they express nothing 0 does not.
   const auto read_tolerance_status =
-    parse_int_param(params, "read_error_tolerance", read_error_tolerance_, 1);
+    parse_int_param(params, "read_error_tolerance", read_error_tolerance_, 0);
   if (read_tolerance_status != CallbackReturn::SUCCESS) {
     return read_tolerance_status;
   }
 
   const auto write_tolerance_status =
-    parse_int_param(params, "write_error_tolerance", write_error_tolerance_, 1);
+    parse_int_param(params, "write_error_tolerance", write_error_tolerance_, 0);
   if (write_tolerance_status != CallbackReturn::SUCCESS) {
     return write_tolerance_status;
   }
@@ -707,13 +725,22 @@ return_type DynamixelHardware::read(
   // Transient sync-read failures (noisy bus, momentary dropout) hold the
   // last-known state and report OK; only read_error_tolerance_ consecutive
   // failures escalate to ERROR so the controller manager can react (#88).
-  // Any success resets the counter.
+  // Any success resets the counter. A tolerance of 0 disables the escalation
+  // (see init_impl()); failures are still counted and warned about, because
+  // going silent about a dying bus would be worse than the old behavior it
+  // restores.
   if (!read_joint_states()) {
-    ++consecutive_read_failures_;
+    // Saturating: with escalation disabled nothing but a successful read ever
+    // resets this counter, so a permanently dead bus would otherwise overflow
+    // it -- signed overflow is undefined behavior -- after a few months of
+    // 100 Hz cycles.
+    if (consecutive_read_failures_ < std::numeric_limits<int>::max()) {
+      ++consecutive_read_failures_;
+    }
     RCLCPP_WARN(
-      logger(), "read_states failed (%d/%d): %s", consecutive_read_failures_,
-      read_error_tolerance_, driver_->last_error().c_str());
-    if (consecutive_read_failures_ >= read_error_tolerance_) {
+      logger(), "read_states failed (%d/%s): %s", consecutive_read_failures_,
+      tolerance_text(read_error_tolerance_).c_str(), driver_->last_error().c_str());
+    if (read_error_tolerance_ > 0 && consecutive_read_failures_ >= read_error_tolerance_) {
       RCLCPP_ERROR(logger(), "read_states failure tolerance exceeded, reporting ERROR");
       return return_type::ERROR;
     }
@@ -845,16 +872,19 @@ return_type DynamixelHardware::handle_write_result(const bool ok)
 {
   // Mirrors read()'s tolerance handling (#88): a transient driver write_*()
   // failure holds at OK, and only write_error_tolerance_ consecutive
-  // failures escalate to ERROR. Any success resets the counter.
+  // failures escalate to ERROR. Any success resets the counter, and a
+  // tolerance of 0 disables the escalation while still counting and warning.
   if (ok) {
     consecutive_write_failures_ = 0;
     return return_type::OK;
   }
-  ++consecutive_write_failures_;
+  if (consecutive_write_failures_ < std::numeric_limits<int>::max()) {
+    ++consecutive_write_failures_;  // saturating, as in read()
+  }
   RCLCPP_WARN(
-    logger(), "driver write failed (%d/%d): %s", consecutive_write_failures_,
-    write_error_tolerance_, driver_->last_error().c_str());
-  if (consecutive_write_failures_ >= write_error_tolerance_) {
+    logger(), "driver write failed (%d/%s): %s", consecutive_write_failures_,
+    tolerance_text(write_error_tolerance_).c_str(), driver_->last_error().c_str());
+  if (write_error_tolerance_ > 0 && consecutive_write_failures_ >= write_error_tolerance_) {
     RCLCPP_ERROR(logger(), "write failure tolerance exceeded, reporting ERROR");
     return return_type::ERROR;
   }

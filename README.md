@@ -33,8 +33,8 @@ Parameters of the `<hardware>` tag:
 | `baud_rate` | required | Serial baud rate, e.g. `1000000`. Must be at least `1`. Only optional under `use_dummy`. |
 | `use_dummy` | `false` | `true` runs the built-in dummy driver, which emulates every operating mode, instead of opening the serial port. |
 | `torque_enable` | `true` | `false` never turns servo torque on: activation and mode switches skip it and the joints stay limp. Meant for a leader arm in teleoperation, which is back-driven by hand while its states are published. Turning torque *off* is never skipped, so deactivation still de-energizes. |
-| `read_error_tolerance` | `5` | Number of consecutive read failures at which `read()` reports an error. Must be at least `1`. |
-| `write_error_tolerance` | `5` | Number of consecutive driver write failures at which `write()` reports an error. Must be at least `1`. This is a budget of its own, counted separately from `read_error_tolerance`. |
+| `read_error_tolerance` | `5` | Number of consecutive read failures at which `read()` reports an error. `0` never reports one, whatever the failure count. Negative values are rejected. |
+| `write_error_tolerance` | `5` | Number of consecutive driver write failures at which `write()` reports an error, or `0` to never report one. This is a budget of its own, counted separately from `read_error_tolerance`. |
 
 Per-joint parameters, inside each `<joint>` tag:
 
@@ -61,6 +61,8 @@ Both directions of the bus absorb a burst of transient failures before reporting
 
 - A failed read holds the last-known joint states and still returns success; only the `read_error_tolerance`-th consecutive failure makes `read()` report an error. Any successful read resets the counter.
 - A failed driver write likewise returns success until the `write_error_tolerance`-th consecutive failure, which makes `write()` report an error. Any successful write resets the counter.
+
+Reporting an error takes the hardware component through `on_error`, which disables torque and disconnects, so the active controllers are deactivated mid-motion. That is deliberate — a bus that has stopped answering should not look healthy ([#88](https://github.com/dynamixel-community/dynamixel_hardware/issues/88)) — but it is also a change from the previous behavior, where a failed read was only logged and a failed write was never reported at all. Setting a tolerance to `0` restores that older behavior for that direction: the failures are still counted and still logged as warnings, and the plugin simply never escalates. Use it if your bus is too marginal to survive escalation and you would rather ride the failures out; the two directions are independent, so you can disable one and keep the other.
 
 `write()` sends nothing at all until the first successful read after activation, and that first successful read also re-synchronizes the commands to the measured state. A flaky bus therefore cannot make the plugin sync-write a zero or NaN goal to servos it has just energized. Activation itself now succeeds even when its initial read fails -- it only logs a warning -- because that write guard is what keeps the bus safe until a real state arrives.
 

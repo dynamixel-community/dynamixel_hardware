@@ -260,11 +260,15 @@ private:
   bool use_dummy_{false};
   bool torque_enable_param_{true};
   /// Consecutive read_states() failures tolerated before read() escalates to
-  /// return_type::ERROR; see read_joint_states() callers.
+  /// return_type::ERROR; see read_joint_states() callers. 0 disables the
+  /// escalation entirely (failures are still counted and warned about), which
+  /// is the documented opt-out back to the pre-#88 behavior for a bus too
+  /// noisy to survive it.
   int read_error_tolerance_{5};
   int consecutive_read_failures_{0};
   /// Consecutive driver write_*() failures tolerated before write() escalates
-  /// to return_type::ERROR; see handle_write_result().
+  /// to return_type::ERROR; see handle_write_result(). 0 disables the
+  /// escalation, as on the read side.
   int write_error_tolerance_{5};
   int consecutive_write_failures_{0};
   /// Set by read_joint_states() the first time it succeeds after activation
