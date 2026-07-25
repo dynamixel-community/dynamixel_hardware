@@ -149,6 +149,21 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
       mode_name(joint.configured_mode));
   }
 
+  // Two joints sharing one Dynamixel id would each get an independent
+  // active_mode/command/state record for the same physical servo, fighting
+  // each other on every write cycle -- reject before any I/O is attempted.
+  for (size_t i = 0; i < joints_.size(); i++) {
+    for (size_t j = i + 1; j < joints_.size(); j++) {
+      if (joints_[i].id == joints_[j].id) {
+        RCLCPP_ERROR(
+          logger(), "Joints '%s' and '%s' both use Dynamixel id %d; each joint must address a "
+          "distinct servo",
+          info.joints[i].name.c_str(), info.joints[j].name.c_str(), joints_[i].id);
+        return CallbackReturn::ERROR;
+      }
+    }
+  }
+
   pending_modes_.assign(joints_.size(), ControlMode::Position);
   pending_switch_.assign(joints_.size(), false);
   pending_legacy_.assign(joints_.size(), false);

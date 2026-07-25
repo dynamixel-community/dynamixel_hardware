@@ -1350,38 +1350,66 @@ protected:
     return {{"id", "1"}};
   }
 
-  // Builds a single-joint <ros2_control> snippet from the two parameter maps
-  // and parses it through parse_info() -- the file's established idiom --
-  // instead of hand-building a HardwareInfo.
-  CallbackReturn init_with(
+  // Builds a <ros2_control> snippet with one <joint> block per element of
+  // joint_params (named "joint1", "joint2", ... to match
+  // ros2_control_test_assets::urdf_head) and parses it through parse_info()
+  // -- the file's established idiom -- instead of hand-building a
+  // HardwareInfo.
+  //
+  // Deliberately NOT an init_with() overload: std::unordered_map has a
+  // templated iterator-pair constructor, so any single-level joint-param
+  // literal like {"id", "1"} is (spuriously) viable to construct either an
+  // unordered_map or, one level up, an element of
+  // vector<unordered_map<...>>. That makes every existing brace-literal call
+  // to init_with(hw_params, {{"k", "v"}, ...}) genuinely ambiguous between
+  // the two parameter types -- confirmed with a standalone repro -- so this
+  // stays a separate name to keep every existing call site compiling
+  // unchanged.
+  CallbackReturn init_with_joints(
     const std::unordered_map<std::string, std::string> & hardware_params,
-    const std::unordered_map<std::string, std::string> & joint_params)
+    const std::vector<std::unordered_map<std::string, std::string>> & joint_params)
   {
     std::string hardware_block;
     for (const auto & [key, value] : hardware_params) {
       hardware_block += "      <param name=\"" + key + "\">" + value + "</param>\n";
     }
-    std::string joint_block;
-    for (const auto & [key, value] : joint_params) {
-      joint_block += "      <param name=\"" + key + "\">" + value + "</param>\n";
+    std::string joints_block;
+    for (size_t i = 0; i < joint_params.size(); i++) {
+      std::string joint_block;
+      for (const auto & [key, value] : joint_params[i]) {
+        joint_block += "      <param name=\"" + key + "\">" + value + "</param>\n";
+      }
+      joints_block +=
+        "    <joint name=\"joint" + std::to_string(i + 1) + "\">\n" +
+        joint_block +
+        "      <command_interface name=\"position\"/>\n"
+        "      <command_interface name=\"velocity\"/>\n"
+        "      <state_interface name=\"position\"/>\n"
+        "      <state_interface name=\"velocity\"/>\n"
+        "      <state_interface name=\"effort\"/>\n"
+        "    </joint>\n";
     }
     const std::string snippet =
       "\n  <ros2_control name=\"ParamsRobustnessTestSystem\" type=\"system\">\n"
       "    <hardware>\n"
       "      <plugin>dynamixel_hardware/DynamixelHardware</plugin>\n" +
       hardware_block +
-      "    </hardware>\n"
-      "    <joint name=\"joint1\">\n" +
-      joint_block +
-      "      <command_interface name=\"position\"/>\n"
-      "      <command_interface name=\"velocity\"/>\n"
-      "      <state_interface name=\"position\"/>\n"
-      "      <state_interface name=\"velocity\"/>\n"
-      "      <state_interface name=\"effort\"/>\n"
-      "    </joint>\n"
+      "    </hardware>\n" +
+      joints_block +
       "  </ros2_control>\n";
     info_ = parse_info(snippet);
     return call_on_init(hw_, info_);
+  }
+
+  // Single-joint helper used by the majority of this fixture's tests;
+  // implemented in terms of init_with_joints() above so the snippet-building
+  // logic exists once.
+  CallbackReturn init_with(
+    const std::unordered_map<std::string, std::string> & hardware_params,
+    const std::unordered_map<std::string, std::string> & joint_params)
+  {
+    return init_with_joints(
+      hardware_params, std::vector<std::unordered_map<std::string, std::string>>{joint_params});
   }
 
   void configure_activate()
@@ -1925,6 +1953,24 @@ TEST_F(ParamsRobustnessTest, ReturnDelayTimeWrittenOnConfigure)
   EXPECT_CALL(*mock_, write_item(1, ::testing::StrEq("Return_Delay_Time"), 0))
   .WillOnce(::testing::Return(true));
   EXPECT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+}
+
+// Two <joint> entries sharing one Dynamixel id would give the plugin two
+// independent active_mode/command/state records for a single physical
+// servo, which then fight each other on every write cycle -- this must be
+// rejected before any I/O is attempted.
+TEST_F(ParamsRobustnessTest, DuplicateJointIdsFailInit)
+{
+  EXPECT_EQ(
+    init_with_joints(default_hw_params(), {{{"id", "1"}}, {{"id", "1"}}}),
+    CallbackReturn::ERROR);
+}
+
+TEST_F(ParamsRobustnessTest, DistinctJointIdsInitSuccessfully)
+{
+  EXPECT_EQ(
+    init_with_joints(default_hw_params(), {{{"id", "1"}}, {{"id", "2"}}}),
+    CallbackReturn::SUCCESS);
 }
 
 }  // namespace m4_test
