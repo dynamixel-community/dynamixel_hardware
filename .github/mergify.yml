@@ -1,5 +1,7 @@
 # Label-driven backports (backport-humble / backport-jazzy / backport-lyrical).
-# If Mergify's OSS terms change, korthout/backport-action is the drop-in replacement - see README.
+# If Mergify's OSS terms change, korthout/backport-action is the drop-in
+# replacement: it runs the same label-driven flow as a GitHub Action, so the
+# labels below and the contributor workflow in the README stay as they are.
 pull_request_rules:
   - name: Backport to humble at reviewers' discretion
     conditions:
