@@ -803,6 +803,26 @@ return_type DynamixelHardware::write(
     }
   }
 
+  // Everything above this point still runs with torque_enable false: tick()
+  // drives the dummy driver's integration, the legacy heuristic keeps the
+  // servos in the right operating mode, and the batching loop above records
+  // this cycle's commands as prev_command -- which is what the heuristic
+  // compares against next cycle. Only the goal sync-writes are skipped,
+  // because no joint can ever be energized in this configuration
+  // (set_torque_all() returns early and apply_mode_switch()'s re-enable leg is
+  // gated), so every one of them is a bus round-trip the servo cannot act on
+  // and whose stored goal reset_joint_command() would overwrite anyway. The
+  // configuration this parameter exists for -- a back-driven leader arm --
+  // wants that bus budget spent on reads (#90).
+  //
+  // The write-failure counter is deliberately left untouched rather than
+  // reset through handle_write_result(true): a cycle that issued no driver
+  // call is no evidence the bus is healthy, just as it is no failure. This
+  // matches the has_valid_state_ guard above, which returns OK the same way.
+  if (!torque_enable_param_) {
+    return return_type::OK;
+  }
+
   // `driver_->write_x(...) && ok` (not `ok && ...`): every batch is attempted
   // even when an earlier one fails, so one bad group cannot stall the others.
   bool ok = true;

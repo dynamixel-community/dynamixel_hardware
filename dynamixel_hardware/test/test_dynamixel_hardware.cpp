@@ -1624,6 +1624,80 @@ TEST_F(ParamsRobustnessTest, TorqueEnableFalseClearsLatchOnSuccessfulSwitch)
   EXPECT_EQ(hw_.write(rclcpp::Time{}, rclcpp::Duration::from_seconds(0.01)), return_type::OK);
 }
 
+// With torque_enable false no joint can ever be energized -- set_torque_all()
+// returns before touching the bus and apply_mode_switch()'s re-enable leg is
+// gated off -- so every goal sync-write is provably useless: the servo cannot
+// act on it, and reset_joint_command() overwrites it the moment torque ever
+// does come on. Spending half of each cycle's bus budget on those writes is
+// exactly wrong for the configuration the parameter exists for (a leader arm,
+// where read latency is all that matters, #90), and it also feeds
+// handle_write_result(), so failures on writes that had no purpose could
+// escalate write() to ERROR and take the leader arm down.
+TEST_F(ParamsRobustnessTest, TorqueEnableFalseSendsNoGoalsToTheBus)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"torque_enable", "false"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();  // the default reads succeed, so has_valid_state_ is latched
+  EXPECT_CALL(*mock_, write_positions(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_velocities(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_efforts(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_pwms(_, _)).Times(0);
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(hw_.write(t, p), return_type::OK) << "cycle " << (i + 1);
+  }
+}
+
+// Only the four driver write_*() calls are skipped: tick(), the legacy
+// heuristic and the per-joint prev_command bookkeeping in write()'s batching
+// loop must all still run. The bookkeeping is what this pins -- the heuristic
+// compares each command against the previous cycle's, so a loop that stops
+// recording them leaves prev_command.velocity frozen at the value the mode
+// switch reset it to, every later cycle then reads as a velocity change, and
+// the joint can never switch back to position control.
+TEST_F(ParamsRobustnessTest, TorqueEnableFalseStillDrivesTheLegacyHeuristic)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"torque_enable", "false"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();
+  // Claiming position and velocity together puts joint1 on the legacy
+  // write() heuristic instead of the prepare/perform path.
+  const std::vector<std::string> legacy_claim = {"joint1/position", "joint1/velocity"};
+  ASSERT_EQ(hw_.prepare_command_mode_switch(legacy_claim, {}), return_type::OK);
+  ASSERT_EQ(hw_.perform_command_mode_switch(legacy_claim, {}), return_type::OK);
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  const rclcpp::Time t;
+  const rclcpp::Duration p = rclcpp::Duration::from_seconds(0.01);
+  EXPECT_CALL(*mock_, write_positions(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_velocities(_, _)).Times(0);
+  EXPECT_CALL(*mock_, tick(_)).Times(3);
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Velocity)).Times(1).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::Position)).Times(1).WillOnce(Return(true));
+
+  // Cycle 1: a changed velocity command switches the joint to velocity control.
+  set_command_value("velocity", 0.3);
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+  // Cycle 2: the same command again. The switch reset it to 0.0, so it still
+  // reads as a change and keeps the joint in velocity control -- and the
+  // batching loop records 0.3 as this cycle's previous command.
+  set_command_value("velocity", 0.3);
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+  // Cycle 3: the velocity command is unchanged -- true only because the loop
+  // ran in cycle 2 -- and the position command changes, so the heuristic
+  // switches back to position control.
+  set_command_value("velocity", 0.3);
+  set_command_value("position", 1.0);
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
 // Failures 1..N-1 (tolerance default 5) hold the last-known state and return
 // OK; the Nth consecutive failure returns ERROR (#88).
 TEST_F(ParamsRobustnessTest, ReadFailuresWithinToleranceHoldLastStateThenError)
