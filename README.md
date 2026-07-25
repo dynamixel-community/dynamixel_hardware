@@ -25,7 +25,7 @@ $ . install/setup.bash
 
 ### Configure Dynamixel motor parameters
 
-Update the `usb_port`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_hardware_examples/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
+Update the `port_name`, `baud_rate`, and `joint_ids` parameters on [`open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro`](https://github.com/youtalk/dynamixel_hardware_examples/blob/main/open_manipulator_x_description/urdf/open_manipulator_x.ros2_control.xacro#L9-L12) to correctly communicate with Dynamixel motors.
 The `use_dummy` parameter is required if you don't have a real OpenManipulator-X.
 
 Note that `joint_ids` parameters must be splited by `,`.
@@ -33,11 +33,15 @@ Note that `joint_ids` parameters must be splited by `,`.
 ```xml
 <hardware>
   <plugin>dynamixel_hardware/DynamixelHardware</plugin>
-  <param name="usb_port">/dev/ttyUSB0</param>
+  <param name="port_name">/dev/ttyUSB0</param>
   <param name="baud_rate">1000000</param>
   <!-- <param name="use_dummy">true</param> -->
 </hardware>
 ```
+
+The `port_name` parameter used to be named `usb_port`. `usb_port` still works, but it is deprecated and logs a warning at startup; rename it to `port_name` in your URDF.
+
+Deactivating the hardware component (or shutting down the `controller_manager`) now disables torque, so the joints go limp -- previously `on_deactivate` was a no-op and the servos stayed energized. Keep this in mind before deactivating a robot that isn't resting in a safe pose.
 
 - Terminal 1
 
