@@ -169,6 +169,10 @@ private:
   bool use_dummy_{false};
   bool torque_enable_param_{true};
   bool torque_enabled_{false};
+  /// Consecutive read_states() failures tolerated before read() escalates to
+  /// return_type::ERROR; see read_joint_states() callers.
+  int read_error_tolerance_{5};
+  int consecutive_read_failures_{0};
   /// Latched by a failed perform_command_mode_switch(): the affected joints
   /// are de-energized, so write() reports an error until the switch succeeds
   /// or the component is re-activated.

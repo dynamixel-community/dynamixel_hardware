@@ -1540,6 +1540,90 @@ TEST_F(ParamsRobustnessTest, TorqueEnableFalseClearsLatchOnSuccessfulSwitch)
   EXPECT_EQ(hw_.write(rclcpp::Time{}, rclcpp::Duration::from_seconds(0.01)), return_type::OK);
 }
 
+// Failures 1..N-1 (tolerance default 5) hold the last-known state and return
+// OK; the Nth consecutive failure returns ERROR (#88).
+TEST_F(ParamsRobustnessTest, ReadFailuresWithinToleranceHoldLastStateThenError)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({1.25}, {0.5}, {0.75}));
+  ASSERT_EQ(hw_.read(t, p), return_type::OK);
+  ASSERT_NEAR(state_value(hardware_interface::HW_IF_POSITION), 1.25, 1e-9);
+
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(Return(false));
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(hw_.read(t, p), return_type::OK) << "failure " << (i + 1);
+    EXPECT_NEAR(state_value(hardware_interface::HW_IF_POSITION), 1.25, 1e-9);
+    EXPECT_NEAR(state_value(hardware_interface::HW_IF_VELOCITY), 0.5, 1e-9);
+    EXPECT_NEAR(state_value(hardware_interface::HW_IF_EFFORT), 0.75, 1e-9);
+  }
+  EXPECT_EQ(hw_.read(t, p), return_type::ERROR);
+}
+
+// Any successful read resets the counter, so a transient burst that never
+// reaches tolerance never accumulates toward a later, unrelated burst.
+TEST_F(ParamsRobustnessTest, SuccessfulReadResetsFailureCounter)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(Return(false));
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(hw_.read(t, p), return_type::OK);
+  }
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({0.1}, {0.0}, {0.0}));
+  EXPECT_EQ(hw_.read(t, p), return_type::OK);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(Return(false));
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(hw_.read(t, p), return_type::OK) << "failure after recovery " << (i + 1);
+  }
+}
+
+// read_error_tolerance is a hardware parameter: a lower value escalates to
+// ERROR sooner.
+TEST_F(ParamsRobustnessTest, ReadErrorToleranceParameterIsRespected)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"read_error_tolerance", "2"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(Return(false));
+  EXPECT_EQ(hw_.read(t, p), return_type::OK);
+  EXPECT_EQ(hw_.read(t, p), return_type::ERROR);
+}
+
+// Non-numeric and out-of-range (< 1) values are rejected at init, not as an
+// uncaught exception or a silently-ignored parameter.
+TEST_F(ParamsRobustnessTest, InvalidReadErrorToleranceFailsInit)
+{
+  EXPECT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"},
+        {"read_error_tolerance", "abc"}},
+      default_joint_params()),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"read_error_tolerance", "0"}},
+      default_joint_params()),
+    CallbackReturn::ERROR);
+}
+
 }  // namespace m4_test
 
 }  // namespace

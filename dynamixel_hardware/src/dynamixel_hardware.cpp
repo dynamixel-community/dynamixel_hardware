@@ -170,6 +170,23 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
     return CallbackReturn::ERROR;
   }
 
+  const auto tolerance_it = params.find("read_error_tolerance");
+  if (tolerance_it != params.end()) {
+    try {
+      read_error_tolerance_ = std::stoi(tolerance_it->second);
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        logger(), "Invalid 'read_error_tolerance' hardware parameter '%s': %s",
+        tolerance_it->second.c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
+    if (read_error_tolerance_ < 1) {
+      RCLCPP_ERROR(
+        logger(), "read_error_tolerance must be >= 1, got %d", read_error_tolerance_);
+      return CallbackReturn::ERROR;
+    }
+  }
+
   // An injected driver (set_driver_for_testing before on_init) must survive:
   // M3/M4 test fixtures rely on init_impl only creating a driver when none is set.
   if (!driver_) {
@@ -312,6 +329,8 @@ CallbackReturn DynamixelHardware::on_configure(const rclcpp_lifecycle::State & /
 CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /* previous_state */)
 {
   RCLCPP_DEBUG(logger(), "on_activate");
+
+  consecutive_read_failures_ = 0;
 
   // Unlike read(), a failed sync-read is fatal here: init_impl() seeds every
   // joint state with NaN, so reset_command() would copy that NaN into the
@@ -560,12 +579,22 @@ return_type DynamixelHardware::perform_command_mode_switch(
 return_type DynamixelHardware::read(
   const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
 {
+  // Transient sync-read failures (noisy bus, momentary dropout) hold the
+  // last-known state and report OK; only read_error_tolerance_ consecutive
+  // failures escalate to ERROR so the controller manager can react (#88).
+  // Any success resets the counter.
   if (!read_joint_states()) {
-    // Legacy behavior: log and keep the last known state. Consecutive-failure
-    // tolerance and return_type::ERROR escalation land in the params +
-    // robustness PR.
-    RCLCPP_ERROR(logger(), "Read failed: %s", driver_->last_error().c_str());
+    ++consecutive_read_failures_;
+    RCLCPP_WARN(
+      logger(), "read_states failed (%d/%d): %s", consecutive_read_failures_,
+      read_error_tolerance_, driver_->last_error().c_str());
+    if (consecutive_read_failures_ >= read_error_tolerance_) {
+      RCLCPP_ERROR(logger(), "read_states failure tolerance exceeded, reporting ERROR");
+      return return_type::ERROR;
+    }
+    return return_type::OK;  // hold last-known state
   }
+  consecutive_read_failures_ = 0;
   return return_type::OK;
 }
 
