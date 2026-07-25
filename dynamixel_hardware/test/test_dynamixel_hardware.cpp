@@ -1488,6 +1488,58 @@ TEST_F(ParamsRobustnessTest, TorqueEnableDefaultsToTrue)
   configure_activate();
 }
 
+// torque_enable only suppresses turning torque ON. Explicit torque-off
+// requests -- here, on_deactivate()'s unconditional set_torque_all(false) --
+// must still reach the driver so a leader arm can be de-energized on demand.
+TEST_F(ParamsRobustnessTest, TorqueEnableFalseStillDisablesTorque)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"torque_enable", "false"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_EQ(hw_.on_deactivate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+}
+
+// Regression: with torque_enable false, set_torque_all() and
+// apply_mode_switch() jointly guarantee torque_enabled_ can never become
+// true, so the de-energized state after any switch is the intended healthy
+// outcome, not a fault. perform_command_mode_switch() must still clear
+// switch_failed_ on a successful switch -- otherwise one transient
+// set_control_mode() failure would latch the fault forever, since the
+// torque_enabled_-gated clear could never fire, and write() would keep
+// failing (escalating into on_error()) for a joint that is behaving exactly
+// as configured.
+TEST_F(ParamsRobustnessTest, TorqueEnableFalseClearsLatchOnSuccessfulSwitch)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"torque_enable", "false"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();
+
+  const std::vector<std::string> start_interfaces = {"joint1/velocity"};
+  const std::vector<std::string> stop_interfaces = {"joint1/position"};
+
+  // First switch: the driver rejects the mode write, so the latch sets and
+  // write() must report it.
+  EXPECT_CALL(*mock_, set_control_mode(_, _)).WillOnce(Return(false)).WillRepeatedly(Return(true));
+  ASSERT_EQ(hw_.prepare_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+  EXPECT_EQ(
+    hw_.perform_command_mode_switch(start_interfaces, stop_interfaces), return_type::ERROR);
+  EXPECT_EQ(hw_.write(rclcpp::Time{}, rclcpp::Duration::from_seconds(0.01)), return_type::ERROR);
+
+  // The failed switch never committed the claim and never updated
+  // active_mode, so retrying the same interfaces is still a real (non-empty)
+  // Position -> Velocity switch. This time the driver accepts it.
+  ASSERT_EQ(hw_.prepare_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+  EXPECT_EQ(hw_.perform_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+  EXPECT_EQ(hw_.write(rclcpp::Time{}, rclcpp::Duration::from_seconds(0.01)), return_type::OK);
+}
+
 }  // namespace m4_test
 
 }  // namespace

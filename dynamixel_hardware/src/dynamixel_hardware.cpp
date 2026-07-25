@@ -533,12 +533,18 @@ return_type DynamixelHardware::perform_command_mode_switch(
       "error until torque is restored by a successful switch or by re-activating the component");
     return return_type::ERROR;
   }
-  if (torque_enabled_) {
+  if (torque_enabled_ || !torque_enable_param_) {
     // Only an energized outcome clears the fault. apply_mode_switch() also
     // returns OK when it touched no torque at all -- an empty switch, or one
     // performed while the servos are already de-energized by a previous
     // failure -- and clearing on those would report a limp joint as healthy
-    // again, which is exactly what the latch exists to prevent.
+    // again, which is exactly what the latch exists to prevent. The
+    // exception is torque_enable_param_ == false: there, staying de-energized
+    // IS the intended healthy outcome (that is the whole point of the
+    // parameter), so a successful switch is the best result available and
+    // must clear the latch -- the plain torque_enabled_ check still governs
+    // the normal (torque_enable_param_ true) configuration, where clearing on
+    // a de-energized outcome would misreport a limp joint as healthy.
     switch_failed_ = false;
   }
   // The claim bookkeeping is only committed once the servos accepted the
