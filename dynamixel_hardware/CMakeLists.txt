@@ -27,6 +27,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(${PROJECT_NAME} SHARED
   src/dynamixel_hardware.cpp
   src/dummy_driver.cpp
+  src/workbench_driver.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -65,6 +66,13 @@ if(BUILD_TESTING)
   ament_add_gmock(test_dummy_driver test/test_dummy_driver.cpp)
   target_include_directories(test_dummy_driver PRIVATE include)
   target_link_libraries(test_dummy_driver ${PROJECT_NAME})
+
+  ament_add_gmock(test_workbench_driver test/test_workbench_driver.cpp)
+  target_include_directories(test_workbench_driver PRIVATE include)
+  target_link_libraries(test_workbench_driver
+    ${PROJECT_NAME}
+    dynamixel_workbench_toolbox::dynamixel_workbench_toolbox
+  )
 endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
