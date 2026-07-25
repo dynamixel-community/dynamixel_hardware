@@ -44,6 +44,7 @@ from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 TEST_DIR = os.path.dirname(__file__)
+CONTROLLERS_YAML = os.path.join(TEST_DIR, 'test_controllers.yaml')
 
 
 @pytest.mark.launch_test
@@ -63,7 +64,7 @@ def generate_test_description():
     control_node = Node(
         package='controller_manager',
         executable='ros2_control_node',
-        parameters=[os.path.join(TEST_DIR, 'test_controllers.yaml')],
+        parameters=[CONTROLLERS_YAML],
         output='both',
         remappings=[('~/robot_description', '/robot_description')],
     )
@@ -76,13 +77,29 @@ def generate_test_description():
     joint_state_broadcaster_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+        # --param-file is required from ros2_control 6.x on: the controller node no
+        # longer inherits the parameter file given to ros2_control_node, so without
+        # it the controller loads with empty parameters. humble and jazzy accept the
+        # flag too and are unaffected, so there is one form for every distro.
+        arguments=[
+            'joint_state_broadcaster',
+            '--controller-manager',
+            '/controller_manager',
+            '--param-file',
+            CONTROLLERS_YAML,
+        ],
         output='both',
     )
     joint_trajectory_controller_spawner = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['joint_trajectory_controller', '--controller-manager', '/controller_manager'],
+        arguments=[
+            'joint_trajectory_controller',
+            '--controller-manager',
+            '/controller_manager',
+            '--param-file',
+            CONTROLLERS_YAML,
+        ],
         output='both',
     )
     return launch.LaunchDescription(
