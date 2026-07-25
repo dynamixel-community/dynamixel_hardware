@@ -41,6 +41,7 @@ constexpr const char * const kExtraJointParameters[] = {
   "Position_D_Gain",
   "Velocity_P_Gain",
   "Velocity_I_Gain",
+  "Return_Delay_Time",
 };
 
 #if DXL_HAS_PARAMS_ON_INIT

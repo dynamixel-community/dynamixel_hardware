@@ -1914,6 +1914,19 @@ TEST_F(ParamsRobustnessTest, PwmIsUnaffectedByGearRatioAndOffset)
   EXPECT_EQ(hw_.write(t, p), return_type::OK);
 }
 
+// Return_Delay_Time is a kExtraJointParameters entry (#105): a joint-level
+// <param name="Return_Delay_Time">0</param> must reach the control table via
+// the same write_extra_joint_params() loop as Profile_Velocity et al.
+TEST_F(ParamsRobustnessTest, ReturnDelayTimeWrittenOnConfigure)
+{
+  ASSERT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"Return_Delay_Time", "0"}}),
+    CallbackReturn::SUCCESS);
+  EXPECT_CALL(*mock_, write_item(1, ::testing::StrEq("Return_Delay_Time"), 0))
+  .WillOnce(::testing::Return(true));
+  EXPECT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+}
+
 }  // namespace m4_test
 
 }  // namespace
