@@ -15,9 +15,8 @@
 #ifndef DYNAMIXEL_HARDWARE__DYNAMIXEL_HARDWARE_HPP_
 #define DYNAMIXEL_HARDWARE__DYNAMIXEL_HARDWARE_HPP_
 
-#include <dynamixel_workbench_toolbox/dynamixel_workbench.h>
-
-#include <map>
+#include <memory>
+#include <string>
 #include <vector>
 
 #include <hardware_interface/handle.hpp>
@@ -25,8 +24,15 @@
 #include <hardware_interface/system_interface.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 
+#include "dynamixel_hardware/compat.hpp"
+#include "dynamixel_hardware/dynamixel_driver.hpp"
 #include "dynamixel_hardware/visibility_control.h"
+#include "rclcpp/logger.hpp"
 #include "rclcpp/macros.hpp"
+
+#if DXL_HAS_PARAMS_ON_INIT
+#include <hardware_interface/types/hardware_component_interface_params.hpp>
+#endif
 
 using hardware_interface::CallbackReturn;
 using hardware_interface::return_type;
@@ -47,32 +53,38 @@ struct Joint
   JointValue prev_command{};
 };
 
-enum class ControlMode
-{
-  Position,
-  Velocity,
-  Torque,
-  Currrent,
-  ExtendedPosition,
-  MultiTurn,
-  CurrentBasedPosition,
-  PWM,
-};
-
 class DynamixelHardware : public hardware_interface::SystemInterface
 {
 public:
   RCLCPP_SHARED_PTR_DEFINITIONS(DynamixelHardware)
 
+#if DXL_HAS_PARAMS_ON_INIT
   DYNAMIXEL_HARDWARE_PUBLIC
   CallbackReturn on_init(
     const hardware_interface::HardwareComponentInterfaceParams & params) override;
+#else
+  DYNAMIXEL_HARDWARE_PUBLIC
+  CallbackReturn on_init(const hardware_interface::HardwareInfo & info) override;
+#endif
 
+#if DXL_HAS_ON_EXPORT
+  DYNAMIXEL_HARDWARE_PUBLIC
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr>
+  on_export_state_interfaces() override;
+
+  DYNAMIXEL_HARDWARE_PUBLIC
+  std::vector<hardware_interface::CommandInterface::SharedPtr>
+  on_export_command_interfaces() override;
+#else
   DYNAMIXEL_HARDWARE_PUBLIC
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+#endif
+
+  DYNAMIXEL_HARDWARE_PUBLIC
+  CallbackReturn on_configure(const rclcpp_lifecycle::State & previous_state) override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
   CallbackReturn on_activate(const rclcpp_lifecycle::State & previous_state) override;
@@ -81,30 +93,49 @@ public:
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State & previous_state) override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State & previous_state) override;
+
+  DYNAMIXEL_HARDWARE_PUBLIC
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State & previous_state) override;
+
+  DYNAMIXEL_HARDWARE_PUBLIC
+  CallbackReturn on_error(const rclcpp_lifecycle::State & previous_state) override;
+
+  DYNAMIXEL_HARDWARE_PUBLIC
   return_type read(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
   DYNAMIXEL_HARDWARE_PUBLIC
   return_type write(const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
+  /// For tests and derived drivers: replace the driver. An injected driver
+  /// survives on_init (init_impl only creates a driver when none is set).
+  DYNAMIXEL_HARDWARE_PUBLIC
+  void set_driver_for_testing(std::unique_ptr<DynamixelDriver> driver);
+
 private:
+  CallbackReturn init_impl(const hardware_interface::HardwareInfo & info);
+
+  rclcpp::Logger logger() const;
+
   return_type enable_torque(const bool enabled);
 
   return_type set_control_mode(const ControlMode & mode, const bool force_set = false);
 
   return_type reset_command();
 
-  CallbackReturn set_joint_positions();
-  CallbackReturn set_joint_velocities();
+  return_type set_joint_positions();
+  return_type set_joint_velocities();
   CallbackReturn set_joint_params();
 
-  DynamixelWorkbench dynamixel_workbench_;
-  std::map<const char * const, const ControlItem *> control_items_;
+  std::unique_ptr<DynamixelDriver> driver_;
   std::vector<Joint> joints_;
   std::vector<uint8_t> joint_ids_;
+  std::string port_name_;
+  int baud_rate_{0};
+  bool use_dummy_{false};
   bool torque_enabled_{false};
   ControlMode control_mode_{ControlMode::Position};
   bool mode_changed_{false};
-  bool use_dummy_{false};
 };
 }  // namespace dynamixel_hardware
 

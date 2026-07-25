@@ -15,29 +15,21 @@
 #include "dynamixel_hardware/dynamixel_hardware.hpp"
 
 #include <algorithm>
-#include <array>
+#include <cmath>
 #include <limits>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "dynamixel_hardware/dummy_driver.hpp"
+#include "dynamixel_hardware/workbench_driver.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace dynamixel_hardware
 {
-constexpr const char * kDynamixelHardware = "DynamixelHardware";
-constexpr uint8_t kGoalPositionIndex = 0;
-constexpr uint8_t kGoalVelocityIndex = 1;
-constexpr uint8_t kPresentPositionVelocityCurrentIndex = 0;
-constexpr const char * kGoalPositionItem = "Goal_Position";
-constexpr const char * kGoalVelocityItem = "Goal_Velocity";
-constexpr const char * kMovingSpeedItem = "Moving_Speed";
-constexpr const char * kPresentPositionItem = "Present_Position";
-constexpr const char * kPresentVelocityItem = "Present_Velocity";
-constexpr const char * kPresentSpeedItem = "Present_Speed";
-constexpr const char * kPresentCurrentItem = "Present_Current";
-constexpr const char * kPresentLoadItem = "Present_Load";
 constexpr const char * const kExtraJointParameters[] = {
   "Profile_Velocity",
   "Profile_Acceleration",
@@ -48,19 +40,47 @@ constexpr const char * const kExtraJointParameters[] = {
   "Velocity_I_Gain",
 };
 
+#if DXL_HAS_PARAMS_ON_INIT
 CallbackReturn DynamixelHardware::on_init(
   const hardware_interface::HardwareComponentInterfaceParams & params)
 {
-  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "configure");
   if (hardware_interface::SystemInterface::on_init(params) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
   }
+  return init_impl(info_);
+}
+#else
+CallbackReturn DynamixelHardware::on_init(const hardware_interface::HardwareInfo & info)
+{
+  if (hardware_interface::SystemInterface::on_init(info) != CallbackReturn::SUCCESS) {
+    return CallbackReturn::ERROR;
+  }
+  return init_impl(info_);
+}
+#endif
 
-  joints_.resize(info_.joints.size(), Joint());
-  joint_ids_.resize(info_.joints.size(), 0);
+CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareInfo & info)
+{
+  RCLCPP_DEBUG(logger(), "on_init");
 
-  for (uint i = 0; i < info_.joints.size(); i++) {
-    joint_ids_[i] = std::stoi(info_.joints[i].parameters.at("id"));
+  joints_.resize(info.joints.size(), Joint());
+  joint_ids_.resize(info.joints.size(), 0);
+
+  for (size_t i = 0; i < info.joints.size(); i++) {
+    const auto & joint = info.joints[i];
+    const auto id_it = joint.parameters.find("id");
+    if (id_it == joint.parameters.end()) {
+      RCLCPP_ERROR(logger(), "Joint '%s' has no 'id' parameter", joint.name.c_str());
+      return CallbackReturn::ERROR;
+    }
+    try {
+      joint_ids_[i] = static_cast<uint8_t>(std::stoi(id_it->second));
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has an invalid 'id' parameter '%s': %s", joint.name.c_str(),
+        id_it->second.c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
     joints_[i].state.position = std::numeric_limits<double>::quiet_NaN();
     joints_[i].state.velocity = std::numeric_limits<double>::quiet_NaN();
     joints_[i].state.effort = std::numeric_limits<double>::quiet_NaN();
@@ -70,122 +90,97 @@ CallbackReturn DynamixelHardware::on_init(
     joints_[i].prev_command.position = joints_[i].command.position;
     joints_[i].prev_command.velocity = joints_[i].command.velocity;
     joints_[i].prev_command.effort = joints_[i].command.effort;
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "joint_id %d: %d", i, joint_ids_[i]);
+    RCLCPP_INFO(logger(), "joint '%s': id %d", joint.name.c_str(), joint_ids_[i]);
   }
 
-  if (
-    info_.hardware_parameters.find("use_dummy") != info_.hardware_parameters.end() &&
-    info_.hardware_parameters.at("use_dummy") == "true")
-  {
-    use_dummy_ = true;
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "dummy mode");
-    return CallbackReturn::SUCCESS;
-  }
+  const auto & params = info.hardware_parameters;
+  use_dummy_ = params.find("use_dummy") != params.end() && params.at("use_dummy") == "true";
 
-  auto usb_port = info_.hardware_parameters.at("usb_port");
-  auto baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
-  const char * log = nullptr;
-
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "usb_port: %s", usb_port.c_str());
-  RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "baud_rate: %d", baud_rate);
-
-  if (!dynamixel_workbench_.init(usb_port.c_str(), baud_rate, &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+  const auto port_name_it = params.find("port_name");
+  const auto usb_port_it = params.find("usb_port");
+  if (port_name_it != params.end()) {
+    port_name_ = port_name_it->second;
+  } else if (usb_port_it != params.end()) {
+    port_name_ = usb_port_it->second;
+    RCLCPP_WARN(
+      logger(),
+      "The 'usb_port' hardware parameter is deprecated; rename it to 'port_name' in your URDF");
+  } else if (!use_dummy_) {
+    RCLCPP_ERROR(logger(), "Neither 'port_name' nor 'usb_port' hardware parameter is set");
     return CallbackReturn::ERROR;
   }
 
-  for (uint i = 0; i < info_.joints.size(); ++i) {
-    uint16_t model_number = 0;
-    if (!dynamixel_workbench_.ping(joint_ids_[i], &model_number, &log)) {
-      RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+  const auto baud_rate_it = params.find("baud_rate");
+  if (baud_rate_it != params.end()) {
+    try {
+      baud_rate_ = std::stoi(baud_rate_it->second);
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        logger(), "Invalid 'baud_rate' hardware parameter '%s': %s",
+        baud_rate_it->second.c_str(), e.what());
       return CallbackReturn::ERROR;
     }
-  }
-
-  enable_torque(false);
-  set_control_mode(ControlMode::Position, true);
-  set_joint_params();
-  enable_torque(true);
-
-  const ControlItem * goal_position =
-    dynamixel_workbench_.getItemInfo(joint_ids_[0], kGoalPositionItem);
-  if (goal_position == nullptr) {
+  } else if (!use_dummy_) {
+    RCLCPP_ERROR(logger(), "The 'baud_rate' hardware parameter is not set");
     return CallbackReturn::ERROR;
   }
 
-  const ControlItem * goal_velocity =
-    dynamixel_workbench_.getItemInfo(joint_ids_[0], kGoalVelocityItem);
-  if (goal_velocity == nullptr) {
-    goal_velocity = dynamixel_workbench_.getItemInfo(joint_ids_[0], kMovingSpeedItem);
-  }
-  if (goal_velocity == nullptr) {
-    return CallbackReturn::ERROR;
-  }
-
-  const ControlItem * present_position =
-    dynamixel_workbench_.getItemInfo(joint_ids_[0], kPresentPositionItem);
-  if (present_position == nullptr) {
-    return CallbackReturn::ERROR;
-  }
-
-  const ControlItem * present_velocity =
-    dynamixel_workbench_.getItemInfo(joint_ids_[0], kPresentVelocityItem);
-  if (present_velocity == nullptr) {
-    present_velocity = dynamixel_workbench_.getItemInfo(joint_ids_[0], kPresentSpeedItem);
-  }
-  if (present_velocity == nullptr) {
-    return CallbackReturn::ERROR;
-  }
-
-  const ControlItem * present_current =
-    dynamixel_workbench_.getItemInfo(joint_ids_[0], kPresentCurrentItem);
-  if (present_current == nullptr) {
-    present_current = dynamixel_workbench_.getItemInfo(joint_ids_[0], kPresentLoadItem);
-  }
-  if (present_current == nullptr) {
-    return CallbackReturn::ERROR;
-  }
-
-  control_items_[kGoalPositionItem] = goal_position;
-  control_items_[kGoalVelocityItem] = goal_velocity;
-  control_items_[kPresentPositionItem] = present_position;
-  control_items_[kPresentVelocityItem] = present_velocity;
-  control_items_[kPresentCurrentItem] = present_current;
-
-  if (!dynamixel_workbench_.addSyncWriteHandler(
-      control_items_[kGoalPositionItem]->address, control_items_[kGoalPositionItem]->data_length,
-      &log))
-  {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    return CallbackReturn::ERROR;
-  }
-
-  if (!dynamixel_workbench_.addSyncWriteHandler(
-      control_items_[kGoalVelocityItem]->address, control_items_[kGoalVelocityItem]->data_length,
-      &log))
-  {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    return CallbackReturn::ERROR;
-  }
-
-  uint16_t start_address = std::min(
-    control_items_[kPresentPositionItem]->address, control_items_[kPresentCurrentItem]->address);
-  uint16_t read_length = control_items_[kPresentPositionItem]->data_length +
-    control_items_[kPresentVelocityItem]->data_length +
-    control_items_[kPresentCurrentItem]->data_length + 2;
-  if (!dynamixel_workbench_.addSyncReadHandler(start_address, read_length, &log)) {
-    RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-    return CallbackReturn::ERROR;
+  // An injected driver (set_driver_for_testing before on_init) must survive:
+  // M3/M4 test fixtures rely on init_impl only creating a driver when none is set.
+  if (!driver_) {
+    if (use_dummy_) {
+      RCLCPP_INFO(logger(), "dummy mode");
+      driver_ = std::make_unique<DummyDriver>();
+    } else {
+      RCLCPP_INFO(logger(), "port_name: %s, baud_rate: %d", port_name_.c_str(), baud_rate_);
+      driver_ = std::make_unique<WorkbenchDriver>();
+    }
   }
 
   return CallbackReturn::SUCCESS;
 }
 
+#if DXL_HAS_ON_EXPORT
+std::vector<hardware_interface::StateInterface::ConstSharedPtr>
+DynamixelHardware::on_export_state_interfaces()
+{
+  RCLCPP_DEBUG(logger(), "on_export_state_interfaces");
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_interfaces;
+  for (size_t i = 0; i < info_.joints.size(); i++) {
+    state_interfaces.emplace_back(
+      std::make_shared<hardware_interface::StateInterface>(
+        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joints_[i].state.position));
+    state_interfaces.emplace_back(
+      std::make_shared<hardware_interface::StateInterface>(
+        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joints_[i].state.velocity));
+    state_interfaces.emplace_back(
+      std::make_shared<hardware_interface::StateInterface>(
+        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &joints_[i].state.effort));
+  }
+  return state_interfaces;
+}
+
+std::vector<hardware_interface::CommandInterface::SharedPtr>
+DynamixelHardware::on_export_command_interfaces()
+{
+  RCLCPP_DEBUG(logger(), "on_export_command_interfaces");
+  std::vector<hardware_interface::CommandInterface::SharedPtr> command_interfaces;
+  for (size_t i = 0; i < info_.joints.size(); i++) {
+    command_interfaces.emplace_back(
+      std::make_shared<hardware_interface::CommandInterface>(
+        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joints_[i].command.position));
+    command_interfaces.emplace_back(
+      std::make_shared<hardware_interface::CommandInterface>(
+        info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joints_[i].command.velocity));
+  }
+  return command_interfaces;
+}
+#else
 std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_interfaces()
 {
-  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "export_state_interfaces");
+  RCLCPP_DEBUG(logger(), "export_state_interfaces");
   std::vector<hardware_interface::StateInterface> state_interfaces;
-  for (uint i = 0; i < info_.joints.size(); i++) {
+  for (size_t i = 0; i < info_.joints.size(); i++) {
     state_interfaces.emplace_back(
       hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joints_[i].state.position));
@@ -196,15 +191,14 @@ std::vector<hardware_interface::StateInterface> DynamixelHardware::export_state_
       hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &joints_[i].state.effort));
   }
-
   return state_interfaces;
 }
 
 std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_command_interfaces()
 {
-  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "export_command_interfaces");
+  RCLCPP_DEBUG(logger(), "export_command_interfaces");
   std::vector<hardware_interface::CommandInterface> command_interfaces;
-  for (uint i = 0; i < info_.joints.size(); i++) {
+  for (size_t i = 0; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(
       hardware_interface::CommandInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION, &joints_[i].command.position));
@@ -212,100 +206,141 @@ std::vector<hardware_interface::CommandInterface> DynamixelHardware::export_comm
       hardware_interface::CommandInterface(
         info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &joints_[i].command.velocity));
   }
-
   return command_interfaces;
+}
+#endif
+
+CallbackReturn DynamixelHardware::on_configure(const rclcpp_lifecycle::State & /* previous_state */)
+{
+  RCLCPP_DEBUG(logger(), "on_configure");
+
+  if (!driver_->connect(port_name_, baud_rate_)) {
+    RCLCPP_ERROR(
+      logger(), "Failed to open '%s': %s", port_name_.c_str(), driver_->last_error().c_str());
+    return CallbackReturn::ERROR;
+  }
+
+  for (size_t i = 0; i < joint_ids_.size(); i++) {
+    if (!driver_->ping(joint_ids_[i])) {
+      RCLCPP_ERROR(
+        logger(), "Failed to ping id %d: %s", joint_ids_[i], driver_->last_error().c_str());
+      return CallbackReturn::ERROR;
+    }
+  }
+
+  if (!driver_->setup(joint_ids_)) {
+    RCLCPP_ERROR(logger(), "Failed to set up handlers: %s", driver_->last_error().c_str());
+    return CallbackReturn::ERROR;
+  }
+
+  if (set_control_mode(ControlMode::Position, true) != return_type::OK) {
+    return CallbackReturn::ERROR;
+  }
+  if (set_joint_params() != CallbackReturn::SUCCESS) {
+    return CallbackReturn::ERROR;
+  }
+
+  return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /* previous_state */)
 {
-  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "start");
-  for (uint i = 0; i < joints_.size(); i++) {
-    if (use_dummy_ && std::isnan(joints_[i].state.position)) {
-      joints_[i].state.position = 0.0;
-      joints_[i].state.velocity = 0.0;
-      joints_[i].state.effort = 0.0;
+  RCLCPP_DEBUG(logger(), "on_activate");
+  read(rclcpp::Time{}, rclcpp::Duration(0, 0));
+
+  // read() logs and keeps the last known state on failure instead of
+  // returning an error (see read()). At first activation the last known
+  // state is the NaN that init_impl() seeds every joint with, so a failed
+  // initial sync-read must be caught here -- otherwise reset_command() would
+  // copy NaN into the command, and NaN != NaN would make write() sync-write
+  // it to servos that are about to have torque enabled.
+  for (size_t i = 0; i < joints_.size(); i++) {
+    if (std::isnan(joints_[i].state.position)) {
+      RCLCPP_ERROR(
+        logger(), "Joint '%s' has no valid position state; refusing to activate",
+        info_.joints[i].name.c_str());
+      return CallbackReturn::ERROR;
     }
   }
-  read(rclcpp::Time{}, rclcpp::Duration(0, 0));
-  reset_command();
-  write(rclcpp::Time{}, rclcpp::Duration(0, 0));
 
+  reset_command();
+  if (enable_torque(true) != return_type::OK) {
+    return CallbackReturn::ERROR;
+  }
   return CallbackReturn::SUCCESS;
 }
 
 CallbackReturn DynamixelHardware::on_deactivate(
   const rclcpp_lifecycle::State & /* previous_state */)
 {
-  RCLCPP_DEBUG(rclcpp::get_logger(kDynamixelHardware), "stop");
+  RCLCPP_DEBUG(logger(), "on_deactivate");
+  if (enable_torque(false) != return_type::OK) {
+    return CallbackReturn::ERROR;
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn DynamixelHardware::on_cleanup(const rclcpp_lifecycle::State & /* previous_state */)
+{
+  RCLCPP_DEBUG(logger(), "on_cleanup");
+  if (driver_) {
+    driver_->disconnect();
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn DynamixelHardware::on_shutdown(const rclcpp_lifecycle::State & /* previous_state */)
+{
+  RCLCPP_DEBUG(logger(), "on_shutdown");
+  if (driver_) {
+    driver_->disconnect();
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn DynamixelHardware::on_error(const rclcpp_lifecycle::State & /* previous_state */)
+{
+  RCLCPP_ERROR(logger(), "on_error: disabling torque and disconnecting (best effort)");
+  if (driver_) {
+    for (size_t i = 0; i < joint_ids_.size(); i++) {
+      driver_->set_torque(joint_ids_[i], false);  // best effort; result ignored
+    }
+    torque_enabled_ = false;
+    driver_->disconnect();
+  }
   return CallbackReturn::SUCCESS;
 }
 
 return_type DynamixelHardware::read(
-  const rclcpp::Time & /* time */,
-  const rclcpp::Duration & /* period */)
+  const rclcpp::Time & /* time */, const rclcpp::Duration & /* period */)
 {
-  if (use_dummy_) {
+  std::vector<double> positions;
+  std::vector<double> velocities;
+  std::vector<double> efforts;
+  if (!driver_->read_states(joint_ids_, positions, velocities, efforts)) {
+    // Legacy behavior: log and keep the last known state. Consecutive-failure
+    // tolerance and return_type::ERROR escalation land in the params +
+    // robustness PR.
+    RCLCPP_ERROR(logger(), "%s", driver_->last_error().c_str());
     return return_type::OK;
   }
-
-  std::vector<uint8_t> ids(info_.joints.size(), 0);
-  std::vector<int32_t> positions(info_.joints.size(), 0);
-  std::vector<int32_t> velocities(info_.joints.size(), 0);
-  std::vector<int32_t> currents(info_.joints.size(), 0);
-
-  std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
-  const char * log = nullptr;
-
-  if (!dynamixel_workbench_.syncRead(
-      kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(), &log))
-  {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+  for (size_t i = 0; i < joints_.size(); i++) {
+    joints_[i].state.position = positions[i];
+    joints_[i].state.velocity = velocities[i];
+    joints_[i].state.effort = efforts[i];
   }
-
-  if (!dynamixel_workbench_.getSyncReadData(
-      kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
-      control_items_[kPresentCurrentItem]->address,
-      control_items_[kPresentCurrentItem]->data_length, currents.data(), &log))
-  {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
-  if (!dynamixel_workbench_.getSyncReadData(
-      kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
-      control_items_[kPresentVelocityItem]->address,
-      control_items_[kPresentVelocityItem]->data_length, velocities.data(), &log))
-  {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
-  if (!dynamixel_workbench_.getSyncReadData(
-      kPresentPositionVelocityCurrentIndex, ids.data(), ids.size(),
-      control_items_[kPresentPositionItem]->address,
-      control_items_[kPresentPositionItem]->data_length, positions.data(), &log))
-  {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
-  }
-
-  for (uint i = 0; i < ids.size(); i++) {
-    joints_[i].state.position = dynamixel_workbench_.convertValue2Radian(ids[i], positions[i]);
-    joints_[i].state.velocity = dynamixel_workbench_.convertValue2Velocity(ids[i], velocities[i]);
-    joints_[i].state.effort = dynamixel_workbench_.convertValue2Current(currents[i]);
-  }
-
   return return_type::OK;
 }
 
 return_type DynamixelHardware::write(
-  const rclcpp::Time & /* time */,
-  const rclcpp::Duration & /* period */)
+  const rclcpp::Time & /* time */, const rclcpp::Duration & period)
 {
-  if (use_dummy_) {
-    for (auto & joint : joints_) {
-      joint.prev_command.position = joint.command.position;
-      joint.state.position = joint.command.position;
-    }
-    return return_type::OK;
-  }
+  driver_->tick(period.seconds());
+
+  // Legacy heuristic mode switching, kept verbatim from the pre-refactor
+  // implementation: a changed velocity command switches every joint to
+  // velocity control, else a changed position command switches every joint
+  // to position control, else the current mode's commands are re-sent.
 
   // Velocity control
   if (std::any_of(
@@ -339,49 +374,44 @@ return_type DynamixelHardware::write(
   if (std::any_of(
       joints_.cbegin(), joints_.cend(), [](auto j) {return j.command.effort != 0.0;}))
   {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "Effort control is not implemented");
+    RCLCPP_ERROR(logger(), "Effort control is not implemented");
     return return_type::ERROR;
   }
 
-  // If all command values are unchanged, then remain in existing control mode and set
-  // corresponding command values
+  // If all command values are unchanged, then remain in existing control mode
+  // and set corresponding command values
   switch (control_mode_) {
     case ControlMode::Velocity:
       set_joint_velocities();
       return return_type::OK;
-      break;
     case ControlMode::Position:
       set_joint_positions();
       return return_type::OK;
-      break;
     default:  // effort, etc
-      RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "Control mode not implemented");
+      RCLCPP_ERROR(logger(), "Control mode not implemented");
       return return_type::ERROR;
-      break;
   }
 }
 
 return_type DynamixelHardware::enable_torque(const bool enabled)
 {
-  const char * log = nullptr;
-
   if (enabled && !torque_enabled_) {
-    for (uint i = 0; i < info_.joints.size(); ++i) {
-      if (!dynamixel_workbench_.torqueOn(joint_ids_[i], &log)) {
-        RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    for (size_t i = 0; i < joint_ids_.size(); ++i) {
+      if (!driver_->set_torque(joint_ids_[i], true)) {
+        RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
     }
     reset_command();
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Torque enabled");
+    RCLCPP_INFO(logger(), "Torque enabled");
   } else if (!enabled && torque_enabled_) {
-    for (uint i = 0; i < info_.joints.size(); ++i) {
-      if (!dynamixel_workbench_.torqueOff(joint_ids_[i], &log)) {
-        RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    for (size_t i = 0; i < joint_ids_.size(); ++i) {
+      if (!driver_->set_torque(joint_ids_[i], false)) {
+        RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
     }
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Torque disabled");
+    RCLCPP_INFO(logger(), "Torque disabled");
   }
 
   torque_enabled_ = enabled;
@@ -390,7 +420,6 @@ return_type DynamixelHardware::enable_torque(const bool enabled)
 
 return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const bool force_set)
 {
-  const char * log = nullptr;
   mode_changed_ = false;
 
   if (mode == ControlMode::Velocity && (force_set || control_mode_ != ControlMode::Velocity)) {
@@ -399,13 +428,13 @@ return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const 
       enable_torque(false);
     }
 
-    for (uint i = 0; i < joint_ids_.size(); ++i) {
-      if (!dynamixel_workbench_.setVelocityControlMode(joint_ids_[i], &log)) {
-        RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    for (size_t i = 0; i < joint_ids_.size(); ++i) {
+      if (!driver_->set_control_mode(joint_ids_[i], ControlMode::Velocity)) {
+        RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
     }
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Velocity control");
+    RCLCPP_INFO(logger(), "Velocity control");
     if (control_mode_ != ControlMode::Velocity) {
       mode_changed_ = true;
       control_mode_ = ControlMode::Velocity;
@@ -423,13 +452,13 @@ return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const 
       enable_torque(false);
     }
 
-    for (uint i = 0; i < joint_ids_.size(); ++i) {
-      if (!dynamixel_workbench_.setPositionControlMode(joint_ids_[i], &log)) {
-        RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+    for (size_t i = 0; i < joint_ids_.size(); ++i) {
+      if (!driver_->set_control_mode(joint_ids_[i], ControlMode::Position)) {
+        RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
     }
-    RCLCPP_INFO(rclcpp::get_logger(kDynamixelHardware), "Position control");
+    RCLCPP_INFO(logger(), "Position control");
     if (control_mode_ != ControlMode::Position) {
       mode_changed_ = true;
       control_mode_ = ControlMode::Position;
@@ -442,8 +471,7 @@ return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const 
   }
 
   if (control_mode_ != ControlMode::Velocity && control_mode_ != ControlMode::Position) {
-    RCLCPP_FATAL(
-      rclcpp::get_logger(kDynamixelHardware), "Only position/velocity control are implemented");
+    RCLCPP_FATAL(logger(), "Only position/velocity control are implemented");
     return return_type::ERROR;
   }
 
@@ -452,7 +480,7 @@ return_type DynamixelHardware::set_control_mode(const ControlMode & mode, const 
 
 return_type DynamixelHardware::reset_command()
 {
-  for (uint i = 0; i < joints_.size(); i++) {
+  for (size_t i = 0; i < joints_.size(); i++) {
     joints_[i].command.position = joints_[i].state.position;
     joints_[i].command.velocity = 0.0;
     joints_[i].command.effort = 0.0;
@@ -464,64 +492,71 @@ return_type DynamixelHardware::reset_command()
   return return_type::OK;
 }
 
-CallbackReturn DynamixelHardware::set_joint_positions()
+return_type DynamixelHardware::set_joint_positions()
 {
-  const char * log = nullptr;
-  std::vector<int32_t> commands(info_.joints.size(), 0);
-  std::vector<uint8_t> ids(info_.joints.size(), 0);
-
-  std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
-  for (uint i = 0; i < ids.size(); i++) {
+  std::vector<double> commands(joints_.size(), 0.0);
+  for (size_t i = 0; i < joints_.size(); i++) {
     joints_[i].prev_command.position = joints_[i].command.position;
-    commands[i] = dynamixel_workbench_.convertRadian2Value(
-      ids[i], static_cast<float>(joints_[i].command.position));
+    commands[i] = joints_[i].command.position;
   }
-  if (!dynamixel_workbench_.syncWrite(
-      kGoalPositionIndex, ids.data(), ids.size(), commands.data(), 1, &log))
-  {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+  if (!driver_->write_positions(joint_ids_, commands)) {
+    RCLCPP_ERROR(logger(), "%s", driver_->last_error().c_str());
   }
-  return CallbackReturn::SUCCESS;
+  return return_type::OK;
 }
 
-CallbackReturn DynamixelHardware::set_joint_velocities()
+return_type DynamixelHardware::set_joint_velocities()
 {
-  const char * log = nullptr;
-  std::vector<int32_t> commands(info_.joints.size(), 0);
-  std::vector<uint8_t> ids(info_.joints.size(), 0);
-
-  std::copy(joint_ids_.begin(), joint_ids_.end(), ids.begin());
-  for (uint i = 0; i < ids.size(); i++) {
+  std::vector<double> commands(joints_.size(), 0.0);
+  for (size_t i = 0; i < joints_.size(); i++) {
     joints_[i].prev_command.velocity = joints_[i].command.velocity;
-    commands[i] = dynamixel_workbench_.convertVelocity2Value(
-      ids[i], static_cast<float>(joints_[i].command.velocity));
+    commands[i] = joints_[i].command.velocity;
   }
-  if (!dynamixel_workbench_.syncWrite(
-      kGoalVelocityIndex, ids.data(), ids.size(), commands.data(), 1, &log))
-  {
-    RCLCPP_ERROR(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+  if (!driver_->write_velocities(joint_ids_, commands)) {
+    RCLCPP_ERROR(logger(), "%s", driver_->last_error().c_str());
   }
-  return CallbackReturn::SUCCESS;
+  return return_type::OK;
 }
 
 CallbackReturn DynamixelHardware::set_joint_params()
 {
-  const char * log = nullptr;
-  for (uint i = 0; i < info_.joints.size(); ++i) {
+  for (size_t i = 0; i < info_.joints.size(); ++i) {
     for (auto paramName : kExtraJointParameters) {
       if (info_.joints[i].parameters.find(paramName) != info_.joints[i].parameters.end()) {
-        auto value = std::stoi(info_.joints[i].parameters.at(paramName));
-        if (!dynamixel_workbench_.itemWrite(joint_ids_[i], paramName, value, &log)) {
-          RCLCPP_FATAL(rclcpp::get_logger(kDynamixelHardware), "%s", log);
+        int value = 0;
+        try {
+          value = std::stoi(info_.joints[i].parameters.at(paramName));
+        } catch (const std::exception & e) {
+          RCLCPP_ERROR(
+            logger(), "Joint '%s' has an invalid '%s' parameter: %s",
+            info_.joints[i].name.c_str(), paramName, e.what());
+          return CallbackReturn::ERROR;
+        }
+        if (!driver_->write_item(joint_ids_[i], paramName, value)) {
+          RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
           return CallbackReturn::ERROR;
         }
         RCLCPP_INFO(
-          rclcpp::get_logger(
-            kDynamixelHardware), "%s set to %d for joint %d", paramName, value, i);
+          logger(), "%s set to %d for joint '%s'", paramName, value,
+          info_.joints[i].name.c_str());
       }
     }
   }
   return CallbackReturn::SUCCESS;
+}
+
+rclcpp::Logger DynamixelHardware::logger() const
+{
+#if DXL_HAS_COMPONENT_LOGGER
+  return get_logger();
+#else
+  return rclcpp::get_logger("DynamixelHardware");
+#endif
+}
+
+void DynamixelHardware::set_driver_for_testing(std::unique_ptr<DynamixelDriver> driver)
+{
+  driver_ = std::move(driver);
 }
 
 }  // namespace dynamixel_hardware
