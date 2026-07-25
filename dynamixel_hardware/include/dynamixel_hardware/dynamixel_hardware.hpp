@@ -146,6 +146,7 @@ private:
   int find_joint(const std::string & joint_name) const;
 
   bool read_joint_states();
+  return_type handle_write_result(const bool ok);
   return_type set_torque_all(const bool enabled);
   /// Torque off -> set_control_mode -> extra-parameter rewrite -> torque on.
   return_type apply_mode_switch(
@@ -173,6 +174,15 @@ private:
   /// return_type::ERROR; see read_joint_states() callers.
   int read_error_tolerance_{5};
   int consecutive_read_failures_{0};
+  /// Consecutive driver write_*() failures tolerated before write() escalates
+  /// to return_type::ERROR; see handle_write_result().
+  int write_error_tolerance_{5};
+  int consecutive_write_failures_{0};
+  /// Set by read_joint_states() the first time it succeeds after activation
+  /// (or cleared by on_activate()/on_deactivate()); write() stays silent
+  /// until then so it never sends a command derived from the NaN/zero state
+  /// init_impl() seeds every joint with (#92).
+  bool has_valid_state_{false};
   /// Latched by a failed perform_command_mode_switch(): the affected joints
   /// are de-energized, so write() reports an error until the switch succeeds
   /// or the component is re-activated.

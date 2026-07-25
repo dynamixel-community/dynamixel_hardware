@@ -450,18 +450,28 @@ TEST_F(TestDynamixelHardware, on_activate_reads_states_resets_commands_and_enabl
   EXPECT_EQ(return_type::OK, write_once());
 }
 
-// Regression: a failed initial sync-read must not leave the NaN state that
-// init_impl() seeds every joint with flowing into reset_command() and then
-// out to torque-enabled servos on the first write() (NaN != NaN, so the
-// change-detection in write() would treat it as a real command). on_activate
-// must refuse to enable torque when the post-read state is still NaN.
-TEST_F(TestDynamixelHardware, on_activate_fails_when_initial_read_fails)
+// Regression (#92): a failed initial sync-read must not leave the NaN state
+// that init_impl() seeds every joint with flowing into reset_command() and
+// then out to torque-enabled servos on the first write() (NaN != NaN, so the
+// change-detection in write() would treat it as a real command). Rather than
+// fail activation outright, on_activate() now treats the initial read as
+// best-effort and relies on the has_valid_state_ write guard: activation
+// still enables torque (safe -- X-series servos latch
+// Goal_Position = Present_Position on torque-on), but write() must not reach
+// the driver until a read eventually succeeds.
+TEST_F(TestDynamixelHardware, on_activate_succeeds_when_initial_read_fails_but_write_stays_silent)
 {
   init_with_mock(kValidSystem);
   ASSERT_EQ(CallbackReturn::SUCCESS, hw_.on_configure(rclcpp_lifecycle::State()));
   EXPECT_CALL(*mock_, read_states(std::vector<uint8_t>{1, 2}, _, _, _)).WillOnce(Return(false));
-  EXPECT_CALL(*mock_, set_torque(_, true)).Times(0);
-  EXPECT_EQ(CallbackReturn::ERROR, hw_.on_activate(rclcpp_lifecycle::State()));
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, true)).WillOnce(Return(true));
+  EXPECT_EQ(CallbackReturn::SUCCESS, hw_.on_activate(rclcpp_lifecycle::State()));
+
+  EXPECT_CALL(*mock_, tick(_)).Times(0);
+  EXPECT_CALL(*mock_, write_positions(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_velocities(_, _)).Times(0);
+  EXPECT_EQ(return_type::OK, write_once());
 }
 
 TEST_F(TestDynamixelHardware, on_deactivate_disables_torque)
@@ -1620,6 +1630,108 @@ TEST_F(ParamsRobustnessTest, InvalidReadErrorToleranceFailsInit)
   EXPECT_EQ(
     init_with(
       {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"read_error_tolerance", "0"}},
+      default_joint_params()),
+    CallbackReturn::ERROR);
+}
+
+// --- write guard until first successful read (#92) --------------------------
+
+// Regression for #92: if reads never succeed, write() must never reach the
+// driver -- an uninitialized/failed-to-connect bus must not receive a
+// zero/NaN-derived goal position.
+TEST_F(ParamsRobustnessTest, WriteSendsNothingUntilFirstSuccessfulRead)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _)).WillByDefault(Return(false));
+  EXPECT_CALL(*mock_, write_positions(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_velocities(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_efforts(_, _)).Times(0);
+  EXPECT_CALL(*mock_, write_pwms(_, _)).Times(0);
+  configure_activate();  // activation must survive a failing initial read
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(hw_.write(t, p), return_type::OK);
+  }
+}
+
+// The first read to succeed after activation both releases the write guard
+// and re-syncs commands to the just-read state via reset_command(), so the
+// very next write() sends that state back out instead of a stale command.
+TEST_F(ParamsRobustnessTest, FirstSuccessfulReadReleasesWriteGuard)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _)).WillByDefault(Return(false));
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);  // guarded, nothing sent
+
+  ON_CALL(*mock_, read_states(_, _, _, _)).WillByDefault(ReadReturns({0.7}, {0.0}, {0.0}));
+  ASSERT_EQ(hw_.read(t, p), return_type::OK);
+  // reset_command() ran on the first successful read: the position command
+  // equals the just-read state, and write() now reaches the driver. With no
+  // controller having claimed anything, M3's default mode for the joint is
+  // Position (the configured_mode default), and write() re-sends the current
+  // mode's command every cycle, so releasing the guard makes exactly one
+  // write_positions call with the reset command value.
+  EXPECT_CALL(*mock_, write_positions(_, ElementsAre(DoubleNear(0.7, 1e-9))))
+  .WillOnce(Return(true));
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
+// Driver write_*() failures are logged and counted against
+// write_error_tolerance_, mirroring the read side (#88): transient failures
+// hold at OK, and the Nth consecutive failure escalates to ERROR. A
+// subsequent success resets the counter.
+TEST_F(ParamsRobustnessTest, WriteFailuresCountAgainstTolerance)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  configure_activate();  // default reads succeed -> guard released
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ON_CALL(*mock_, write_positions(_, _)).WillByDefault(Return(false));
+  for (int i = 0; i < 4; ++i) {
+    EXPECT_EQ(hw_.write(t, p), return_type::OK) << "write failure " << (i + 1);
+  }
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+
+  ON_CALL(*mock_, write_positions(_, _)).WillByDefault(Return(true));
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);  // success resets the counter
+  ON_CALL(*mock_, write_positions(_, _)).WillByDefault(Return(false));
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
+// write_error_tolerance is a hardware parameter separate from
+// read_error_tolerance: a lower value escalates write() to ERROR sooner.
+TEST_F(ParamsRobustnessTest, WriteErrorToleranceParameterIsRespected)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"write_error_tolerance", "2"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  configure_activate();  // default reads succeed -> guard released
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ON_CALL(*mock_, write_positions(_, _)).WillByDefault(Return(false));
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+}
+
+// Non-numeric and out-of-range (< 1) values are rejected at init, not as an
+// uncaught exception or a silently-ignored parameter.
+TEST_F(ParamsRobustnessTest, InvalidWriteErrorToleranceFailsInit)
+{
+  EXPECT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"},
+        {"write_error_tolerance", "abc"}},
+      default_joint_params()),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"write_error_tolerance", "0"}},
       default_joint_params()),
     CallbackReturn::ERROR);
 }

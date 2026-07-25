@@ -187,6 +187,23 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
     }
   }
 
+  const auto write_tolerance_it = params.find("write_error_tolerance");
+  if (write_tolerance_it != params.end()) {
+    try {
+      write_error_tolerance_ = std::stoi(write_tolerance_it->second);
+    } catch (const std::exception & e) {
+      RCLCPP_ERROR(
+        logger(), "Invalid 'write_error_tolerance' hardware parameter '%s': %s",
+        write_tolerance_it->second.c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
+    if (write_error_tolerance_ < 1) {
+      RCLCPP_ERROR(
+        logger(), "write_error_tolerance must be >= 1, got %d", write_error_tolerance_);
+      return CallbackReturn::ERROR;
+    }
+  }
+
   // An injected driver (set_driver_for_testing before on_init) must survive:
   // M3/M4 test fixtures rely on init_impl only creating a driver when none is set.
   if (!driver_) {
@@ -330,19 +347,22 @@ CallbackReturn DynamixelHardware::on_activate(const rclcpp_lifecycle::State & /*
 {
   RCLCPP_DEBUG(logger(), "on_activate");
 
+  has_valid_state_ = false;
   consecutive_read_failures_ = 0;
+  consecutive_write_failures_ = 0;
 
-  // Unlike read(), a failed sync-read is fatal here: init_impl() seeds every
-  // joint state with NaN, so reset_command() would copy that NaN into the
-  // command, and NaN != NaN would make write() sync-write it to servos that
-  // are about to have torque enabled.
+  // Best-effort initial read (#92): init_impl() seeds every joint state with
+  // NaN, so a failure here must not let reset_command() copy that NaN into
+  // the command and have write() sync-write it to servos that are about to
+  // have torque enabled. Rather than failing activation outright,
+  // read_joint_states() latches has_valid_state_ (and runs reset_command())
+  // only on its first success, and the has_valid_state_ guard in write()
+  // keeps the bus silent until that happens.
   if (!read_joint_states()) {
-    RCLCPP_ERROR(
+    RCLCPP_WARN(
       logger(), "Failed to read the initial joint states: %s", driver_->last_error().c_str());
-    return CallbackReturn::ERROR;
   }
 
-  reset_command();
   if (set_torque_all(true) != return_type::OK) {
     return CallbackReturn::ERROR;
   }
@@ -356,6 +376,7 @@ CallbackReturn DynamixelHardware::on_deactivate(
   const rclcpp_lifecycle::State & /* previous_state */)
 {
   RCLCPP_DEBUG(logger(), "on_deactivate");
+  has_valid_state_ = false;
   if (set_torque_all(false) != return_type::OK) {
     return CallbackReturn::ERROR;
   }
@@ -607,6 +628,14 @@ return_type DynamixelHardware::write(
     return return_type::ERROR;
   }
 
+  if (!has_valid_state_) {
+    // #92: never send commands derived from the NaN/zero state init_impl()
+    // seeds every joint with. write() stays silent until the first
+    // successful read after activation latches has_valid_state_ (see
+    // read_joint_states()).
+    return return_type::OK;
+  }
+
   driver_->tick(period.seconds());
 
   // A failed mode switch leaves the servos with torque off, so it must not be
@@ -683,8 +712,25 @@ return_type DynamixelHardware::write(
   if (!pwm_ids.empty()) {
     ok = driver_->write_pwms(pwm_ids, pwm_commands) && ok;
   }
-  if (!ok) {
-    RCLCPP_ERROR(logger(), "Write failed: %s", driver_->last_error().c_str());
+  return handle_write_result(ok);
+}
+
+return_type DynamixelHardware::handle_write_result(const bool ok)
+{
+  // Mirrors read()'s tolerance handling (#88): a transient driver write_*()
+  // failure holds at OK, and only write_error_tolerance_ consecutive
+  // failures escalate to ERROR. Any success resets the counter.
+  if (ok) {
+    consecutive_write_failures_ = 0;
+    return return_type::OK;
+  }
+  ++consecutive_write_failures_;
+  RCLCPP_WARN(
+    logger(), "driver write failed (%d/%d): %s", consecutive_write_failures_,
+    write_error_tolerance_, driver_->last_error().c_str());
+  if (consecutive_write_failures_ >= write_error_tolerance_) {
+    RCLCPP_ERROR(logger(), "write failure tolerance exceeded, reporting ERROR");
+    return return_type::ERROR;
   }
   return return_type::OK;
 }
@@ -721,6 +767,15 @@ bool DynamixelHardware::read_joint_states()
     joints_[i].state.position = positions[i];
     joints_[i].state.velocity = velocities[i];
     joints_[i].state.effort = effort_state_from_motor(i, efforts[i]);
+  }
+  if (!has_valid_state_) {
+    // First successful state read since activation (#92): latch so write()
+    // starts sending commands, and re-sync commands from the now-known state
+    // so they never carry the NaN/zero placeholder init_impl() seeds every
+    // joint with. Both read() and on_activate() call this helper, so the
+    // latch fires from either call site without duplicating this logic.
+    has_valid_state_ = true;
+    reset_command();
   }
   return true;
 }
