@@ -121,6 +121,8 @@ TEST(TestWorkbenchDriver, calls_before_connect_fail_with_not_connected)
   EXPECT_FALSE(driver.set_control_mode(1, dynamixel_hardware::ControlMode::Position));
   EXPECT_FALSE(driver.write_positions({1}, {0.0}));
   EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_FALSE(driver.write_efforts({1}, {0.0}));
+  EXPECT_FALSE(driver.write_pwms({1}, {0.0}));
   EXPECT_FALSE(driver.write_item(1, "Profile_Velocity", 100));
   std::vector<double> positions;
   std::vector<double> velocities;
@@ -153,6 +155,10 @@ TEST(TestWorkbenchDriver, calls_after_connect_before_setup_fail_with_not_set_up)
   EXPECT_FALSE(driver.write_positions({1}, {0.0}));
   EXPECT_EQ("not set up", driver.last_error());
   EXPECT_FALSE(driver.write_velocities({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+  EXPECT_FALSE(driver.write_efforts({1}, {0.0}));
+  EXPECT_EQ("not set up", driver.last_error());
+  EXPECT_FALSE(driver.write_pwms({1}, {0.0}));
   EXPECT_EQ("not set up", driver.last_error());
   std::vector<double> positions;
   std::vector<double> velocities;

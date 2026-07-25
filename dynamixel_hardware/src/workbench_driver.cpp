@@ -65,6 +65,7 @@ void WorkbenchDriver::disconnect()
   control_items_.clear();
   control_modes_.clear();
   model_names_.clear();
+  lead_model_name_.clear();
   goal_current_index_ = -1;
   goal_pwm_index_ = -1;
   setup_done_ = false;
@@ -124,6 +125,7 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
   control_items_.clear();
   control_modes_.clear();
   model_names_.clear();
+  lead_model_name_.clear();
   goal_current_index_ = -1;
   goal_pwm_index_ = -1;
   setup_done_ = false;
@@ -138,6 +140,11 @@ bool WorkbenchDriver::setup(const std::vector<uint8_t> & ids)
     model_names_[id] = name != nullptr ? name : "unknown";
     control_modes_[id] = ControlMode::Position;
   }
+  // ids[0] is the lead model: setup() only probes its control table below to
+  // decide which sync-write handlers to register (getItemInfo() needs a
+  // concrete id and every configured servo shares the same bus protocol in
+  // practice). Remember its name for "handler not available" diagnostics.
+  lead_model_name_ = model_names_[ids[0]];
 
   // Control-table name fallbacks keep both Protocol 2.0 (X series etc.) and
   // older Protocol 1.0 servos working.
@@ -284,6 +291,25 @@ bool WorkbenchDriver::set_control_mode(uint8_t id, ControlMode mode)
       std::string(item) + "'";
     return false;
   }
+  // A servo's own control table can have Goal_Current/Goal_PWM even when the
+  // bus's lead model does not, since setup() only registers those sync-write
+  // handlers when ids[0]'s control table has them. Reject the switch here,
+  // at the point the guard is meant to fire, rather than letting it succeed
+  // and have every later write_efforts()/write_pwms() call fail instead.
+  if ((mode == ControlMode::Current || mode == ControlMode::CurrentBasedPosition) &&
+    setup_done_ && goal_current_index_ < 0)
+  {
+    last_error_ = "ID " + std::to_string(id) + " (model " + model_name(id) +
+      ") cannot use this control mode: no Goal_Current sync-write handler is registered " +
+      "(lead model " + lead_model_name_ + " has no Goal_Current)";
+    return false;
+  }
+  if (mode == ControlMode::PWM && setup_done_ && goal_pwm_index_ < 0) {
+    last_error_ = "ID " + std::to_string(id) + " (model " + model_name(id) +
+      ") cannot use this control mode: no Goal_PWM sync-write handler is registered " +
+      "(lead model " + lead_model_name_ + " has no Goal_PWM)";
+    return false;
+  }
 
   const char * log = nullptr;
   bool ok = false;
@@ -408,8 +434,8 @@ bool WorkbenchDriver::write_efforts(
 
   if (!current_ids.empty()) {
     if (goal_current_index_ < 0) {
-      last_error_ = "Goal_Current sync write handler is not available (model " +
-        model_name(current_ids[0]) + " has no Goal_Current)";
+      last_error_ = "Goal_Current sync write handler is not available (lead model " +
+        lead_model_name_ + " has no Goal_Current)";
       return false;
     }
     if (!workbench_->syncWrite(
@@ -430,8 +456,8 @@ bool WorkbenchDriver::write_pwms(
     return false;
   }
   if (goal_pwm_index_ < 0) {
-    last_error_ = "Goal_PWM sync write handler is not available (model " +
-      model_name(ids.empty() ? 0 : ids[0]) + " has no Goal_PWM)";
+    last_error_ = "Goal_PWM sync write handler is not available (lead model " +
+      lead_model_name_ + " has no Goal_PWM)";
     return false;
   }
   const char * log = nullptr;

@@ -93,6 +93,13 @@ private:
   std::map<const char * const, const ControlItem *> control_items_;
   std::unordered_map<uint8_t, ControlMode> control_modes_;
   std::unordered_map<uint8_t, std::string> model_names_;
+  // Model name of ids[0] as setup() saw it: the servo whose control table
+  // decides which of the Goal_Current/Goal_PWM sync-write handlers below get
+  // registered. Named explicitly in "handler not available" diagnostics so
+  // they always point at the servo actually responsible, even when the id
+  // that triggered the failure is a different (fully capable) model on the
+  // same bus.
+  std::string lead_model_name_;
   // Actually assigned Goal_Current / Goal_PWM sync-write handler indices
   // (nominally 2 and 3; -1 when the lead model's control table lacks the
   // item -- see setup()).
