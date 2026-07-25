@@ -64,9 +64,15 @@ struct Joint
   ControlMode active_mode{ControlMode::Position};
   /// Claimed position and velocity together -> legacy write() heuristic.
   bool legacy{false};
-  /// Whether this servo is believed to be energized right now. Tracked per
-  /// joint because a partial failure -- one servo torqued, the next one
-  /// refusing -- is a state no hardware-wide flag can represent.
+  /// Whether this servo is energized right now. Tracked per joint because a
+  /// partial failure -- one servo torqued, the next one refusing -- is a state
+  /// no hardware-wide flag can represent. Invariant governing every site that
+  /// assigns it: `true` means a driver call CONFIRMED torque on and nothing
+  /// has tried to turn it off since. So it is set only after a successful
+  /// torque-on, and cleared before a torque-off is attempted; a rejected
+  /// torque-on leaves it false. Reading false therefore means "not known to be
+  /// energized", which is why the mode switch de-energizes such a joint anyway
+  /// but never re-energizes it.
   bool torque_enabled{false};
   /// Nm/A; 0.0 means unset and the effort interfaces carry milliamps.
   double torque_constant{0.0};

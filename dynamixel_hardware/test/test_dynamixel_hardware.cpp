@@ -924,11 +924,14 @@ TEST_F(ControlModeM3Test, failed_mode_switch_stops_believing_torque_is_enabled)
   ASSERT_EQ(return_type::ERROR, prepare_perform({"joint1/velocity", "joint2/velocity"}, {}));
   ::testing::Mock::VerifyAndClearExpectations(mock_);
 
-  // The servos are off, so the next mode switch must not cycle torque around
-  // the rewrite: re-enabling it would energize a component nobody
-  // re-activated, and needing the cycle at all would mean the plugin still
-  // believed the stale "torque enabled" state.
-  EXPECT_CALL(*mock_, set_torque(_, _)).Times(0);
+  // The servos are off, so the next mode switch must not energize them:
+  // turning torque back on here would power up a component nobody
+  // re-activated. The torque-OFF still goes out, because it is unconditional
+  // -- a joint that is merely not known to be energized may still be torqued,
+  // and the firmware would then refuse the Operating_Mode write -- but
+  // nothing turns torque back on.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(_, true)).Times(0);
   EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
   EXPECT_EQ(return_type::OK, prepare_perform({"joint1/pwm"}, {"joint1/velocity"}));
 }
@@ -978,12 +981,14 @@ TEST_F(ControlModeM3Test, a_torque_free_mode_switch_does_not_clear_the_write_err
   ASSERT_EQ(return_type::ERROR, write_once());
   ::testing::Mock::VerifyAndClearExpectations(mock_);
 
-  // The joint is de-energized, so this switch rewrites the operating mode
-  // without cycling torque and returns OK having restored nothing. A
-  // successful return is therefore NOT enough to clear the fault: doing so
-  // would put the plugin straight back to commanding a limp servo and
-  // reporting healthy cycles. Only torque being on again clears it.
-  EXPECT_CALL(*mock_, set_torque(_, _)).Times(0);
+  // The joint is de-energized, so this switch rewrites the operating mode and
+  // returns OK having restored no torque (the unconditional torque-off still
+  // goes out; nothing turns it back on). A successful return is therefore NOT
+  // enough to clear the fault: doing so would put the plugin straight back to
+  // commanding a limp servo and reporting healthy cycles. Only torque being
+  // confirmed on again clears it.
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(_, true)).Times(0);
   EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
   ASSERT_EQ(return_type::OK, prepare_perform({"joint1/pwm"}, {"joint1/velocity"}));
   EXPECT_EQ(return_type::ERROR, write_once());
@@ -1538,7 +1543,9 @@ TEST_F(ParamsRobustnessTest, MissingPortParameterFailsInit)
 
 // A leader arm in a teleoperation setup must stay freely movable: with
 // torque_enable false, torque is never turned on, neither at activation nor
-// across a mode switch.
+// across a mode switch. The mode switch's unconditional torque-OFF is still
+// sent (and is allowed for here) -- it only reinforces the state this
+// configuration wants.
 TEST_F(ParamsRobustnessTest, TorqueEnableFalseSkipsTorqueOn)
 {
   ASSERT_EQ(
@@ -1546,6 +1553,7 @@ TEST_F(ParamsRobustnessTest, TorqueEnableFalseSkipsTorqueOn)
       {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"torque_enable", "false"}},
       default_joint_params()),
     CallbackReturn::SUCCESS);
+  EXPECT_CALL(*mock_, set_torque(_, false)).WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_, set_torque(_, true)).Times(0);
   configure_activate();
   const std::vector<std::string> start_interfaces = {"joint1/velocity"};
@@ -2063,9 +2071,51 @@ TEST_F(ParamsRobustnessTest, ModeSwitchFaultStaysLatchedWhileAnotherJointIsDeEne
   EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
 }
 
-// The other half of the latch condition: once every joint reports torque on
-// again, a successful switch does clear the fault and write() resumes.
-TEST_F(ParamsRobustnessTest, SuccessfulSwitchClearsLatchOnceEveryJointIsEnergized)
+// The escalated case: joint 2's re-enable is rejected *inside*
+// apply_mode_switch, then a later switch touching joint 1 ONLY succeeds. The
+// rejected call is no confirmation that joint 2 came back on, so recording it
+// as energized would let all_torque_enabled() clear the fault and put write()
+// straight back to sync-writing goals to a limp servo.
+TEST_F(ParamsRobustnessTest, RejectedReEnableDoesNotLetALaterSwitchClearTheLatch)
+{
+  ASSERT_EQ(
+    init_with_joints(default_hw_params(), {{{"id", "1"}}, {{"id", "2"}}}),
+    CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({0.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}));
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+
+  // Both joints are cycled; joint 2 refuses to come back on.
+  const std::vector<std::string> to_velocity = {"joint1/velocity", "joint2/velocity"};
+  EXPECT_CALL(*mock_, set_torque(_, false)).Times(2).WillRepeatedly(Return(true));
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, true)).WillOnce(Return(false));
+  ASSERT_EQ(hw_.prepare_command_mode_switch(to_velocity, {}), return_type::OK);
+  ASSERT_EQ(hw_.perform_command_mode_switch(to_velocity, {}), return_type::ERROR);
+  ASSERT_EQ(hw_.write(t, p), return_type::ERROR);
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // A fully successful switch of joint 1 alone says nothing about joint 2, so
+  // the fault must survive it.
+  const std::vector<std::string> to_pwm = {"joint1/pwm"};
+  EXPECT_CALL(*mock_, set_torque(1, false)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_control_mode(1, ControlMode::PWM)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, _)).Times(0);
+  ASSERT_EQ(hw_.prepare_command_mode_switch(to_pwm, {"joint1/velocity"}), return_type::OK);
+  EXPECT_EQ(hw_.perform_command_mode_switch(to_pwm, {"joint1/velocity"}), return_type::OK);
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+}
+
+// A joint whose torque-on was rejected is NOT silently re-energized by a later
+// mode switch, even one that covers it: the switch de-energizes it (that leg
+// is unconditional) but only restores joints that were confirmed energized on
+// entry, because powering a servo back up is an activation decision, not a
+// mode-switch side effect. Re-activating the component is what recovers it,
+// and that is what clears the fault.
+TEST_F(ParamsRobustnessTest, RejectedReEnableIsRecoveredByReactivationNotByASwitch)
 {
   ASSERT_EQ(
     init_with_joints(default_hw_params(), {{{"id", "1"}}, {{"id", "2"}}}),
@@ -2087,14 +2137,21 @@ TEST_F(ParamsRobustnessTest, SuccessfulSwitchClearsLatchOnceEveryJointIsEnergize
   ASSERT_EQ(hw_.write(t, p), return_type::ERROR);
   ::testing::Mock::VerifyAndClearExpectations(mock_);
 
-  // A switch that cycles both joints' torque successfully leaves every joint
-  // energized, which is the only outcome that clears the fault.
+  // A later switch covering both joints de-energizes both, but only joint 1 --
+  // the one that was confirmed on -- is restored. Joint 2 stays limp, so the
+  // fault stays latched.
   const std::vector<std::string> to_pwm = {"joint1/pwm", "joint2/pwm"};
   EXPECT_CALL(*mock_, set_torque(_, false)).Times(2).WillRepeatedly(Return(true));
   EXPECT_CALL(*mock_, set_torque(1, true)).WillOnce(Return(true));
-  EXPECT_CALL(*mock_, set_torque(2, true)).WillOnce(Return(true));
+  EXPECT_CALL(*mock_, set_torque(2, true)).Times(0);
   ASSERT_EQ(hw_.prepare_command_mode_switch(to_pwm, to_velocity), return_type::OK);
   EXPECT_EQ(hw_.perform_command_mode_switch(to_pwm, to_velocity), return_type::OK);
+  EXPECT_EQ(hw_.write(t, p), return_type::ERROR);
+  ::testing::Mock::VerifyAndClearExpectations(mock_);
+
+  // Re-activation energizes every joint and is the documented recovery.
+  EXPECT_CALL(*mock_, set_torque(_, true)).Times(2).WillRepeatedly(Return(true));
+  ASSERT_EQ(hw_.on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
   EXPECT_EQ(hw_.write(t, p), return_type::OK);
 }
 

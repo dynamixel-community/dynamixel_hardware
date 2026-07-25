@@ -923,22 +923,29 @@ return_type DynamixelHardware::apply_mode_switch(
     return return_type::OK;
   }
   // Dynamixel requirement: the operating mode can only change with torque off.
-  // Only the joints this switch actually de-energizes are collected, so a
-  // joint that was already limp is not silently energized by the re-enable leg
-  // below, and a joint outside `indices` is never touched at all.
-  std::vector<size_t> de_energized;
-  de_energized.reserve(indices.size());
+  // Every joint being switched is de-energized unconditionally, including one
+  // this plugin already believes is off: `torque_enabled` false only means
+  // torque was never confirmed on, and a servo whose torque-on was rejected
+  // may well be energized anyway. Sending the redundant torque-off is
+  // idempotent, whereas skipping a needed one has the firmware refuse the
+  // Operating_Mode write.
+  //
+  // The joints that were confirmed energized on entry are remembered, because
+  // only those may be restored afterwards -- re-energizing the rest would
+  // power up servos that a deactivation, a torque_enable=false configuration
+  // or an earlier failure deliberately left limp. Joints outside `indices` are
+  // never touched at all.
+  std::vector<size_t> to_restore;
+  to_restore.reserve(indices.size());
   for (const auto index : indices) {
     auto & joint = joints_[index];
-    if (!joint.torque_enabled) {
-      continue;
+    if (joint.torque_enabled) {
+      to_restore.push_back(index);
     }
-    // Cleared before the call, not after: while the servo is being
-    // de-energized its flag must read false, because a stale `true` would
-    // make write() sync-write goals to a limp servo and would make the next
-    // switch believe it still has to cycle torque.
+    // Cleared before the call, not after: from here on the servo is being
+    // de-energized, and a stale `true` would make write() sync-write goals to
+    // a limp servo and would let all_torque_enabled() report it as healthy.
     joint.torque_enabled = false;
-    de_energized.push_back(index);
     if (!driver_->set_torque(joint.id, false)) {
       RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
       return return_type::ERROR;
@@ -960,18 +967,19 @@ return_type DynamixelHardware::apply_mode_switch(
     return return_type::ERROR;
   }
   if (torque_enable_param_) {
-    for (const auto index : de_energized) {
+    for (const auto index : to_restore) {
       auto & joint = joints_[index];
-      // Set before the call, not after it: a failed call still leaves the
-      // servo it was aimed at possibly energized, and under-reporting that
-      // would make the next switch skip the mandatory torque-off leg and try
-      // to rewrite Operating_Mode on a torqued servo, which the firmware
-      // refuses.
-      joint.torque_enabled = true;
       if (!driver_->set_torque(joint.id, true)) {
         RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
         return return_type::ERROR;
       }
+      // Recorded only once the driver confirms it, exactly like
+      // set_torque_all(): a rejected torque-on is no evidence the servo came
+      // back up, and claiming otherwise would let all_torque_enabled() clear
+      // the mode-switch fault latch while that joint is still limp. The
+      // torque-off leg above no longer skips anything, so under-reporting
+      // here cannot cost a joint its mandatory torque-off.
+      joint.torque_enabled = true;
     }
   }
   for (const auto index : indices) {
