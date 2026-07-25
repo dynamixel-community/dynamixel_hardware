@@ -13,9 +13,14 @@
 // limitations under the License.
 
 #include <gmock/gmock.h>
+#include <rcutils/logging.h>
 
+#include <cstdarg>
+#include <cstdio>
+#include <limits>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -1269,6 +1274,193 @@ TEST_F(DummyFullStackM3Test, effort_round_trips_through_torque_constant)
 }
 
 }  // namespace m3_test
+
+// ---------------------------------------------------------------------------
+// M4: hardware-parameter and read/write robustness. ParamsRobustnessTest is
+// the shared fixture every later M4 task builds its tests on: it composes a
+// single-joint <ros2_control> snippet from two parameter maps and runs it
+// through the file's established parse_info() idiom, rather than
+// hand-building a HardwareInfo.
+// ---------------------------------------------------------------------------
+
+namespace m4_test
+{
+
+std::string & captured_log()
+{
+  static std::string log;
+  return log;
+}
+
+void capture_log_handler(
+  const rcutils_log_location_t * /*location*/, int /*severity*/, const char * /*name*/,
+  rcutils_time_point_value_t /*timestamp*/, const char * format, va_list * args)
+{
+  char buffer[4096];
+  va_list args_copy;
+  va_copy(args_copy, *args);
+  vsnprintf(buffer, sizeof(buffer), format, args_copy);
+  va_end(args_copy);
+  captured_log() += buffer;
+  captured_log() += "\n";
+}
+
+class ParamsRobustnessTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    auto mock = std::make_unique<NiceMock<MockDriver>>();
+    mock_ = mock.get();
+    hw_.set_driver_for_testing(std::move(mock));
+    set_default_driver_actions(*mock_);
+    ON_CALL(*mock_, read_states(_, _, _, _))
+    .WillByDefault(ReadReturns({0.0}, {0.0}, {0.0}));
+  }
+
+  static ::testing::Action<bool(
+      const std::vector<uint8_t> &, std::vector<double> &, std::vector<double> &,
+      std::vector<double> & )>
+  ReadReturns(std::vector<double> pos, std::vector<double> vel, std::vector<double> eff)
+  {
+    return DoAll(
+      SetArgReferee<1>(std::move(pos)), SetArgReferee<2>(std::move(vel)),
+      SetArgReferee<3>(std::move(eff)), Return(true));
+  }
+
+  static std::unordered_map<std::string, std::string> default_hw_params()
+  {
+    return {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}};
+  }
+
+  static std::unordered_map<std::string, std::string> default_joint_params()
+  {
+    return {{"id", "1"}};
+  }
+
+  // Builds a single-joint <ros2_control> snippet from the two parameter maps
+  // and parses it through parse_info() -- the file's established idiom --
+  // instead of hand-building a HardwareInfo.
+  CallbackReturn init_with(
+    const std::unordered_map<std::string, std::string> & hardware_params,
+    const std::unordered_map<std::string, std::string> & joint_params)
+  {
+    std::string hardware_block;
+    for (const auto & [key, value] : hardware_params) {
+      hardware_block += "      <param name=\"" + key + "\">" + value + "</param>\n";
+    }
+    std::string joint_block;
+    for (const auto & [key, value] : joint_params) {
+      joint_block += "      <param name=\"" + key + "\">" + value + "</param>\n";
+    }
+    const std::string snippet =
+      "\n  <ros2_control name=\"ParamsRobustnessTestSystem\" type=\"system\">\n"
+      "    <hardware>\n"
+      "      <plugin>dynamixel_hardware/DynamixelHardware</plugin>\n" +
+      hardware_block +
+      "    </hardware>\n"
+      "    <joint name=\"joint1\">\n" +
+      joint_block +
+      "      <command_interface name=\"position\"/>\n"
+      "      <command_interface name=\"velocity\"/>\n"
+      "      <state_interface name=\"position\"/>\n"
+      "      <state_interface name=\"velocity\"/>\n"
+      "      <state_interface name=\"effort\"/>\n"
+      "    </joint>\n"
+      "  </ros2_control>\n";
+    info_ = parse_info(snippet);
+    return call_on_init(hw_, info_);
+  }
+
+  void configure_activate()
+  {
+#if DXL_HAS_ON_EXPORT
+    state_ifaces_ = hw_.on_export_state_interfaces();
+#else
+    state_ifaces_ = hw_.export_state_interfaces();
+#endif
+    ASSERT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+    ASSERT_EQ(hw_.on_activate(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+  }
+
+  double state_value(const std::string & interface_name)
+  {
+#if DXL_HAS_ON_EXPORT
+    for (const auto & si : state_ifaces_) {
+      if (si->get_interface_name() == interface_name) {
+        // get_optional() is gated on DXL_HAS_PARAMS_ON_INIT (get_optional is
+        // 4.27.0; 4.34.0 discriminates the pinned targets), not the export gate.
+#if DXL_HAS_PARAMS_ON_INIT
+        return si->get_optional().value();
+#else
+        return si->get_value();
+#endif
+      }
+    }
+#else
+    for (auto & si : state_ifaces_) {
+      if (si.get_interface_name() == interface_name) {
+        return si.get_value();
+      }
+    }
+#endif
+    ADD_FAILURE() << "state interface not found: " << interface_name;
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+
+  DynamixelHardware hw_;
+  NiceMock<MockDriver> * mock_{nullptr};
+  hardware_interface::HardwareInfo info_;
+#if DXL_HAS_ON_EXPORT
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_ifaces_;
+#else
+  std::vector<hardware_interface::StateInterface> state_ifaces_;
+#endif
+};
+
+// Regression for the canonical port_name parameter (#87, #86): usb_port is
+// still accepted but logs a one-time deprecation warning, and on_configure()
+// still connects using the fallback value.
+TEST_F(ParamsRobustnessTest, UsbPortFallbackWarnsDeprecation)
+{
+  captured_log().clear();
+  const rcutils_logging_output_handler_t previous_handler =
+    rcutils_logging_get_output_handler();
+  rcutils_logging_set_output_handler(capture_log_handler);
+  const auto result =
+    init_with({{"usb_port", "/dev/ttyUSB0"}, {"baud_rate", "57600"}}, default_joint_params());
+  rcutils_logging_set_output_handler(previous_handler);
+  ASSERT_EQ(result, CallbackReturn::SUCCESS);
+  EXPECT_NE(captured_log().find("usb_port"), std::string::npos);
+  EXPECT_NE(captured_log().find("deprecated"), std::string::npos);
+
+  EXPECT_CALL(*mock_, connect(::testing::StrEq("/dev/ttyUSB0"), 57600))
+  .WillOnce(Return(true));
+  EXPECT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+}
+
+// port_name wins when both parameters are given.
+TEST_F(ParamsRobustnessTest, PortNameTakesPrecedenceOverUsbPort)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB1"}, {"usb_port", "/dev/ttyUSB0"}, {"baud_rate", "57600"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  EXPECT_CALL(*mock_, connect(::testing::StrEq("/dev/ttyUSB1"), 57600))
+  .WillOnce(Return(true));
+  EXPECT_EQ(hw_.on_configure(rclcpp_lifecycle::State()), CallbackReturn::SUCCESS);
+}
+
+// A missing port parameter is reported as an init error, not an uncaught
+// exception.
+TEST_F(ParamsRobustnessTest, MissingPortParameterFailsInit)
+{
+  EXPECT_EQ(
+    init_with({{"baud_rate", "57600"}}, default_joint_params()), CallbackReturn::ERROR);
+}
+
+}  // namespace m4_test
 
 }  // namespace
 
