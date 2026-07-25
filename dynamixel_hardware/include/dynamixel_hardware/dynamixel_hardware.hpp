@@ -66,6 +66,15 @@ struct Joint
   bool legacy{false};
   /// Nm/A; 0.0 means unset and the effort interfaces carry milliamps.
   double torque_constant{0.0};
+  /// Motor revolutions per joint revolution. Positions/velocities are divided
+  /// by it and efforts multiplied by it going from motor side to joint side;
+  /// commands are the inverse. Negative inverts the direction; zero is
+  /// rejected at init.
+  double gear_ratio{1.0};
+  /// Joint-side position offset: subtracted after the gear conversion on
+  /// read, added back before it on write. Parsed starting Task 7; stays at
+  /// this default (a no-op) until then.
+  double offset{0.0};
   std::set<std::string> claimed_interfaces{};
 };
 
@@ -147,6 +156,14 @@ private:
   CallbackReturn parse_int_param(
     const std::unordered_map<std::string, std::string> & params, const char * name, int & out,
     int min_value);
+  /// Parses params[name] as a double into out, always requiring a finite
+  /// value; rejects zero unless allow_zero is true. Absent key: returns
+  /// SUCCESS without touching out (callers decide whether the parameter is
+  /// required). Non-numeric value, non-finite value, or a disallowed zero:
+  /// logs and returns ERROR.
+  CallbackReturn parse_double_param(
+    const std::unordered_map<std::string, std::string> & params, const char * name, double & out,
+    bool allow_zero);
 
   rclcpp::Logger logger() const;
 
@@ -166,6 +183,20 @@ private:
 
   double effort_command_to_motor(size_t index) const;
   double effort_state_from_motor(size_t index, double motor_effort) const;
+
+  /// gear_ratio/offset conversions at the driver boundary (#95/#94). Contract
+  /// (fixed): gear_ratio = motor revolutions per joint revolution;
+  /// joint_position = motor_position / gear_ratio, joint_velocity =
+  /// motor_velocity / gear_ratio, joint_effort = motor_effort * gear_ratio;
+  /// commands are the inverse. offset applies to position only:
+  /// joint_reported = raw_joint_position - offset (raw = after gear
+  /// conversion); commands add it back before scaling.
+  double to_joint_position(size_t index, double motor_position) const;
+  double to_motor_position(size_t index, double joint_position) const;
+  double to_joint_velocity(size_t index, double motor_velocity) const;
+  double to_motor_velocity(size_t index, double joint_velocity) const;
+  double to_joint_effort(size_t index, double motor_effort) const;
+  double to_motor_effort(size_t index, double joint_effort) const;
 
   static bool is_position_family(ControlMode mode);
   static bool parse_control_mode(const std::string & value, ControlMode & mode);

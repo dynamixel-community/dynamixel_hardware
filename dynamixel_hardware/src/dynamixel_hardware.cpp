@@ -15,6 +15,7 @@
 #include "dynamixel_hardware/dynamixel_hardware.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -118,6 +119,14 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
       }
     }
 
+    // Zero would make the gear conversion divide by zero; negative ratios are
+    // deliberately allowed -- they invert the rotation direction (#95/#94).
+    const auto gear_ratio_status =
+      parse_double_param(joint_params, "gear_ratio", joint.gear_ratio, false);
+    if (gear_ratio_status != CallbackReturn::SUCCESS) {
+      return gear_ratio_status;
+    }
+
     joint.state.position = std::numeric_limits<double>::quiet_NaN();
     joint.state.velocity = std::numeric_limits<double>::quiet_NaN();
     joint.state.effort = std::numeric_limits<double>::quiet_NaN();
@@ -211,6 +220,32 @@ CallbackReturn DynamixelHardware::parse_int_param(
   }
   if (out < min_value) {
     RCLCPP_ERROR(logger(), "%s must be >= %d, got %d", name, min_value, out);
+    return CallbackReturn::ERROR;
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+CallbackReturn DynamixelHardware::parse_double_param(
+  const std::unordered_map<std::string, std::string> & params, const char * name, double & out,
+  bool allow_zero)
+{
+  const auto it = params.find(name);
+  if (it == params.end()) {
+    return CallbackReturn::SUCCESS;  // absent: caller decides whether that's required
+  }
+  try {
+    out = std::stod(it->second);
+  } catch (const std::exception & e) {
+    RCLCPP_ERROR(
+      logger(), "Invalid '%s' parameter '%s': %s", name, it->second.c_str(), e.what());
+    return CallbackReturn::ERROR;
+  }
+  if (!std::isfinite(out)) {
+    RCLCPP_ERROR(logger(), "%s must be finite, got '%s'", name, it->second.c_str());
+    return CallbackReturn::ERROR;
+  }
+  if (!allow_zero && out == 0.0) {
+    RCLCPP_ERROR(logger(), "%s must be non-zero", name);
     return CallbackReturn::ERROR;
   }
   return CallbackReturn::SUCCESS;
@@ -659,34 +694,36 @@ return_type DynamixelHardware::write(
       case ControlMode::ExtendedPosition:
       case ControlMode::MultiTurn:
         position_ids.push_back(joint.id);
-        position_commands.push_back(joint.command.position);
+        position_commands.push_back(to_motor_position(i, joint.command.position));
         joint.prev_command.position = joint.command.position;
         break;
       case ControlMode::CurrentBasedPosition:
         position_ids.push_back(joint.id);
-        position_commands.push_back(joint.command.position);
+        position_commands.push_back(to_motor_position(i, joint.command.position));
         joint.prev_command.position = joint.command.position;
         // The current cap is only commanded when the controller claimed the
         // effort interface; otherwise the servo keeps its Goal_Current
         // register (which defaults to Current_Limit).
         if (joint.claimed_interfaces.count(hardware_interface::HW_IF_EFFORT) != 0) {
           effort_ids.push_back(joint.id);
-          effort_commands.push_back(effort_command_to_motor(i));
+          effort_commands.push_back(to_motor_effort(i, effort_command_to_motor(i)));
           joint.prev_command.effort = joint.command.effort;
         }
         break;
       case ControlMode::Velocity:
         velocity_ids.push_back(joint.id);
-        velocity_commands.push_back(joint.command.velocity);
+        velocity_commands.push_back(to_motor_velocity(i, joint.command.velocity));
         joint.prev_command.velocity = joint.command.velocity;
         break;
       case ControlMode::Current:
       case ControlMode::Torque:
         effort_ids.push_back(joint.id);
-        effort_commands.push_back(effort_command_to_motor(i));
+        effort_commands.push_back(to_motor_effort(i, effort_command_to_motor(i)));
         joint.prev_command.effort = joint.command.effort;
         break;
       case ControlMode::PWM:
+        // PWM duty ratios are never gear-converted (#95/#94): they are not a
+        // physical position/velocity/effort quantity.
         pwm_ids.push_back(joint.id);
         pwm_commands.push_back(joint.command.pwm);
         joint.prev_command.pwm = joint.command.pwm;
@@ -761,9 +798,12 @@ bool DynamixelHardware::read_joint_states()
     return false;
   }
   for (size_t i = 0; i < joints_.size(); i++) {
-    joints_[i].state.position = positions[i];
-    joints_[i].state.velocity = velocities[i];
-    joints_[i].state.effort = effort_state_from_motor(i, efforts[i]);
+    joints_[i].state.position = to_joint_position(i, positions[i]);
+    joints_[i].state.velocity = to_joint_velocity(i, velocities[i]);
+    // torque_constant (mA -> Nm) and gear_ratio commute, so their order here
+    // is arbitrary; effort_state_from_motor stays the driver-boundary
+    // conversion, gear composes around it.
+    joints_[i].state.effort = to_joint_effort(i, effort_state_from_motor(i, efforts[i]));
   }
   if (!has_valid_state_) {
     // First successful state read since activation (#92): latch so write()
@@ -966,6 +1006,38 @@ double DynamixelHardware::effort_state_from_motor(size_t index, double motor_eff
     return motor_effort / 1000.0 * joint.torque_constant;  // mA -> Nm
   }
   return motor_effort;  // stays mA
+}
+
+double DynamixelHardware::to_joint_position(size_t index, double motor_position) const
+{
+  const auto & joint = joints_[index];
+  return motor_position / joint.gear_ratio - joint.offset;
+}
+
+double DynamixelHardware::to_motor_position(size_t index, double joint_position) const
+{
+  const auto & joint = joints_[index];
+  return (joint_position + joint.offset) * joint.gear_ratio;
+}
+
+double DynamixelHardware::to_joint_velocity(size_t index, double motor_velocity) const
+{
+  return motor_velocity / joints_[index].gear_ratio;
+}
+
+double DynamixelHardware::to_motor_velocity(size_t index, double joint_velocity) const
+{
+  return joint_velocity * joints_[index].gear_ratio;
+}
+
+double DynamixelHardware::to_joint_effort(size_t index, double motor_effort) const
+{
+  return motor_effort * joints_[index].gear_ratio;
+}
+
+double DynamixelHardware::to_motor_effort(size_t index, double joint_effort) const
+{
+  return joint_effort / joints_[index].gear_ratio;
 }
 
 bool DynamixelHardware::is_position_family(ControlMode mode)

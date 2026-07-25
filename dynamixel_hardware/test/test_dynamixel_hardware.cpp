@@ -1752,6 +1752,55 @@ TEST_F(ParamsRobustnessTest, InvalidWriteErrorToleranceFailsInit)
     CallbackReturn::ERROR);
 }
 
+// --- gear_ratio (#95/#94) ----------------------------------------------
+
+// gear_ratio (motor revolutions per joint revolution) scales positions and
+// velocities down and efforts up on the joint side; commands are the inverse
+// mapping. The absolute state assertions pin the conversion direction and the
+// write_positions expectation pins the inverse, so a swapped multiply/divide
+// pair cannot pass.
+TEST_F(ParamsRobustnessTest, GearRatioScalesStatesAndCommands)
+{
+  ASSERT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"gear_ratio", "2.0"}}),
+    CallbackReturn::SUCCESS);
+  ON_CALL(*mock_, read_states(_, _, _, _))
+  .WillByDefault(ReadReturns({2.4}, {1.2}, {0.5}));
+  configure_activate();
+  const rclcpp::Time t;
+  const rclcpp::Duration p(0, 0);
+  ASSERT_EQ(hw_.read(t, p), return_type::OK);
+  // joint = motor / gear_ratio (positions, velocities); effort = motor * gear_ratio.
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_POSITION), 1.2, 1e-9);
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_VELOCITY), 0.6, 1e-9);
+  EXPECT_NEAR(state_value(hardware_interface::HW_IF_EFFORT), 1.0, 1e-9);
+  // Round trip: the position command was reset to the joint-side state (1.2)
+  // and must reach the driver motor-side again (1.2 * 2.0 = 2.4).
+  EXPECT_CALL(*mock_, write_positions(_, ElementsAre(DoubleNear(2.4, 1e-9))))
+  .WillOnce(Return(true));
+  EXPECT_EQ(hw_.write(t, p), return_type::OK);
+}
+
+// Non-numeric, non-finite (std::stod happily parses "nan"/"inf"), and zero
+// values are rejected at init. Zero is invalid because it collapses the
+// conversion into a divide-by-zero; a negative ratio is a legal direction
+// inversion and must not be rejected here.
+TEST_F(ParamsRobustnessTest, InvalidGearRatioFailsInit)
+{
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"gear_ratio", "abc"}}),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"gear_ratio", "0"}}),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"gear_ratio", "nan"}}),
+    CallbackReturn::ERROR);
+  EXPECT_EQ(
+    init_with(default_hw_params(), {{"id", "1"}, {"gear_ratio", "inf"}}),
+    CallbackReturn::ERROR);
+}
+
 }  // namespace m4_test
 
 }  // namespace
