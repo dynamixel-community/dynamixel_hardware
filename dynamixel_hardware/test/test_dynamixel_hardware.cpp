@@ -49,6 +49,7 @@ using dynamixel_hardware::ControlMode;
 using dynamixel_hardware::DynamixelHardware;
 using dynamixel_hardware::MockDriver;
 using ::testing::_;
+using ::testing::AtLeast;
 using ::testing::DoAll;
 using ::testing::DoubleEq;
 using ::testing::DoubleNear;
@@ -1458,6 +1459,33 @@ TEST_F(ParamsRobustnessTest, MissingPortParameterFailsInit)
 {
   EXPECT_EQ(
     init_with({{"baud_rate", "57600"}}, default_joint_params()), CallbackReturn::ERROR);
+}
+
+// A leader arm in a teleoperation setup must stay freely movable: with
+// torque_enable false, torque is never turned on, neither at activation nor
+// across a mode switch.
+TEST_F(ParamsRobustnessTest, TorqueEnableFalseSkipsTorqueOn)
+{
+  ASSERT_EQ(
+    init_with(
+      {{"port_name", "/dev/ttyUSB0"}, {"baud_rate", "57600"}, {"torque_enable", "false"}},
+      default_joint_params()),
+    CallbackReturn::SUCCESS);
+  EXPECT_CALL(*mock_, set_torque(_, true)).Times(0);
+  configure_activate();
+  const std::vector<std::string> start_interfaces = {"joint1/velocity"};
+  const std::vector<std::string> stop_interfaces = {"joint1/position"};
+  EXPECT_EQ(hw_.prepare_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+  EXPECT_EQ(hw_.perform_command_mode_switch(start_interfaces, stop_interfaces), return_type::OK);
+}
+
+// Absent torque_enable, behavior is unchanged from M3: torque is turned on.
+TEST_F(ParamsRobustnessTest, TorqueEnableDefaultsToTrue)
+{
+  ASSERT_EQ(init_with(default_hw_params(), default_joint_params()), CallbackReturn::SUCCESS);
+  EXPECT_CALL(*mock_, set_torque(_, true))
+  .Times(AtLeast(1)).WillRepeatedly(Return(true));
+  configure_activate();
 }
 
 }  // namespace m4_test

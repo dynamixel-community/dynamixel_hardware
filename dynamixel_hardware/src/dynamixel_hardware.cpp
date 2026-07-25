@@ -138,6 +138,9 @@ CallbackReturn DynamixelHardware::init_impl(const hardware_interface::HardwareIn
   const auto & params = info.hardware_parameters;
   use_dummy_ = params.find("use_dummy") != params.end() && params.at("use_dummy") == "true";
 
+  const auto torque_enable_it = params.find("torque_enable");
+  torque_enable_param_ = torque_enable_it == params.end() || torque_enable_it->second != "false";
+
   const auto port_name_it = params.find("port_name");
   const auto usb_port_it = params.find("usb_port");
   if (port_name_it != params.end()) {
@@ -689,6 +692,10 @@ bool DynamixelHardware::read_joint_states()
 
 return_type DynamixelHardware::set_torque_all(const bool enabled)
 {
+  if (enabled && !torque_enable_param_) {
+    RCLCPP_DEBUG(logger(), "torque_enable is false: skipping torque on");
+    return return_type::OK;
+  }
   for (const auto & joint : joints_) {
     if (!driver_->set_torque(joint.id, enabled)) {
       RCLCPP_FATAL(logger(), "%s", driver_->last_error().c_str());
@@ -744,7 +751,7 @@ return_type DynamixelHardware::apply_mode_switch(
   if (write_extra_joint_params(indices) != CallbackReturn::SUCCESS) {
     return return_type::ERROR;
   }
-  if (was_torque_enabled) {
+  if (was_torque_enabled && torque_enable_param_) {
     // Set before the loop, not after it: a partial failure still leaves the
     // servos the loop already reached energized, and under-reporting that
     // would make the next switch skip the mandatory torque-off leg and try to

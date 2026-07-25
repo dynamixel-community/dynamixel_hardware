@@ -167,6 +167,7 @@ private:
   std::string port_name_;
   int baud_rate_{0};
   bool use_dummy_{false};
+  bool torque_enable_param_{true};
   bool torque_enabled_{false};
   /// Latched by a failed perform_command_mode_switch(): the affected joints
   /// are de-energized, so write() reports an error until the switch succeeds
