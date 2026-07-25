@@ -27,6 +27,7 @@
 #include <hardware_interface/component_parser.hpp>
 #include <hardware_interface/hardware_info.hpp>
 #include <hardware_interface/resource_manager.hpp>
+#include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <hardware_interface/types/lifecycle_state_names.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -1331,9 +1332,12 @@ protected:
     .WillByDefault(ReadReturns({0.0}, {0.0}, {0.0}));
   }
 
+  // The parameters are named purely so the type does not end in "&)": uncrustify
+  // 0.72 (humble) and 0.78 (jazzy+) disagree about the space in that exact
+  // spelling, and no single form of it satisfies both.
   static ::testing::Action<bool(
-      const std::vector<uint8_t> &, std::vector<double> &, std::vector<double> &,
-      std::vector<double> & )>
+      const std::vector<uint8_t> & ids, std::vector<double> & positions,
+      std::vector<double> & velocities, std::vector<double> & efforts)>
   ReadReturns(std::vector<double> pos, std::vector<double> vel, std::vector<double> eff)
   {
     return DoAll(
