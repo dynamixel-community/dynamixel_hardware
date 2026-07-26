@@ -3,7 +3,7 @@
 <package format="3">
   <name>dynamixel_hardware</name>
   <version>0.6.1</version>
-  <description>ros2_control hardware interface for ROBOTIS Dynamixel servo motors</description>
+  <description>[DEPRECATED] ros2_control hardware interface for ROBOTIS Dynamixel servo motors. Use dynamixel_hardware_interface instead: https://github.com/ROBOTIS-GIT/dynamixel_hardware_interface</description>
   <maintainer email="yutaka.kondo@youtalk.jp">Yutaka Kondo</maintainer>
   <license>Apache-2.0</license>
 
