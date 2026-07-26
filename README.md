@@ -5,6 +5,14 @@
 [![Build and Test (jazzy)](https://github.com/dynamixel-community/dynamixel_hardware/actions/workflows/build_and_test_jazzy.yaml/badge.svg?branch=jazzy)](https://github.com/dynamixel-community/dynamixel_hardware/actions/workflows/build_and_test_jazzy.yaml)
 [![Build and Test (humble)](https://github.com/dynamixel-community/dynamixel_hardware/actions/workflows/build_and_test_humble.yaml/badge.svg?branch=humble)](https://github.com/dynamixel-community/dynamixel_hardware/actions/workflows/build_and_test_humble.yaml)
 
+> ## ⚠️ This package is deprecated
+>
+> Use ROBOTIS's officially maintained [`dynamixel_hardware_interface`](https://github.com/ROBOTIS-GIT/dynamixel_hardware_interface) instead. It fills the same role, is released for humble, jazzy, kilted, lyrical, and rolling, and has capabilities this package never had.
+>
+> **[Read the migration guide.](docs/migration_to_dynamixel_hardware_interface.md)** It maps every parameter and interface, and is honest about the four things you lose — runtime control-mode switching, `use_dummy`, Protocol 1.0 servos, and lifecycle-based reconnection — with a workaround for each.
+>
+> No further releases will be made; the last one was 0.6.1. This repository will be **archived (read-only)** once the end-of-life status lands in `ros/rosdistro`. Published binaries stay published and keep working. If you cannot migrate, [pin this package](docs/migration_to_dynamixel_hardware_interface.md#6-if-you-cannot-migrate).
+
 The [`ros2_control`](https://control.ros.org/) hardware interface for any kind of [ROBOTIS Dynamixel](https://emanual.robotis.com/docs/en/dxl/) robot.
 
 The package builds one pluginlib plugin, `dynamixel_hardware/DynamixelHardware`: a [`SystemInterface`](https://github.com/ros-controls/ros2_control/blob/master/hardware_interface/include/hardware_interface/system_interface.hpp) implementation that drives any number of ROBOTIS Dynamixel servos sharing a single serial bus. It is hopefully compatible with any configuration of Dynamixel servos, thanks to `ros2_control`'s flexible architecture.
